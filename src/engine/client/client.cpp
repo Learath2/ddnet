@@ -2124,13 +2124,13 @@ void CClient::FinishMapDownload()
 	const char *pError;
 	m_pConsole->Print(IConsole::OUTPUT_LEVEL_ADDINFO, "client/network", "download complete, loading map");
 
-	ResetMapDownload();
 	m_MapdownloadTotalsize = -1;
 
 	// load map
 	pError = LoadMap(m_aMapdownloadName, m_aMapdownloadFilename, m_MapdownloadCrc);
 	if(!pError)
 	{
+		ResetMapDownload();
 		m_pConsole->Print(IConsole::OUTPUT_LEVEL_ADDINFO, "client/network", "loading done");
 		SendReady();
 	}
@@ -2139,8 +2139,10 @@ void CClient::FinishMapDownload()
 		ResetMapDownload();
 		SendMapRequest();
 	}
-	else
+	else{
+		ResetMapDownload();
 		DisconnectWithReason(pError);
+	}
 }
 
 void CClient::PumpNetwork()
