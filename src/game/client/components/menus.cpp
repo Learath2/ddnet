@@ -1317,6 +1317,7 @@ int CMenus::Render()
 				Part.VMargin(40.0f, &Part);
 				RenderTools()->DrawUIRect(&Part, vec4(1.0f, 1.0f, 1.0f, 0.25f), CUI::CORNER_ALL, 5.0f);
 				Part.w = max(10.0f, (Part.w*Client()->MapDownloadAmount())/Client()->MapDownloadTotalsize());
+				dbg_msg("FUCK", "Amount: %d, Total: %d", Client()->MapDownloadAmount(), Client()->MapDownloadTotalsize());
 				RenderTools()->DrawUIRect(&Part, vec4(1.0f, 1.0f, 1.0f, 0.5f), CUI::CORNER_ALL, 5.0f);
 			}
 		}

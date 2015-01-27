@@ -129,6 +129,7 @@ class CClient : public IClient, public CDemoPlayer::IListner
 	char m_aCmdConnect[256];
 
 	// map download
+	bool m_MapdownloadHTTPAtt;
 	CFetchTask *m_pMapdownloadTask;
 	char m_aMapdownloadFilename[256];
 	char m_aMapdownloadName[256];
@@ -299,8 +300,8 @@ public:
 
 	virtual CFetchTask *MapDownloadTask() { return m_pMapdownloadTask; }
 	virtual const char *MapDownloadName() { return m_aMapdownloadName; }
-	virtual int MapDownloadAmount() { return !m_pMapdownloadTask ? m_MapdownloadAmount : (int)m_pMapdownloadTask->Current(); }
-	virtual int MapDownloadTotalsize() { return !m_pMapdownloadTask ? m_MapdownloadTotalsize : (int)m_pMapdownloadTask->Size(); }
+	virtual int MapDownloadAmount() { dbg_msg("foo", "m_pMapdownloadTask: %p; m_MapdownloadAmount: %d; Current: %d; returning %d!", (void*)m_pMapdownloadTask, m_MapdownloadAmount, m_pMapdownloadTask ? (int)m_pMapdownloadTask->Current() : -420, !m_pMapdownloadTask ? m_MapdownloadAmount : (int)m_pMapdownloadTask->Current()); return !m_pMapdownloadTask ? m_MapdownloadAmount : (int)m_pMapdownloadTask->Current(); } 
+	virtual int MapDownloadTotalsize() {dbg_msg("foo", "m_pMapdownloadTask: %p; m_MapdownloadTotalsize: %d; Current: %d; returning %d!", (void*)m_pMapdownloadTask, m_MapdownloadTotalsize, m_pMapdownloadTask ? (int)m_pMapdownloadTask->Size() : -420, !m_pMapdownloadTask ? m_MapdownloadTotalsize : (int)m_pMapdownloadTask->Size()); return !m_pMapdownloadTask ? m_MapdownloadTotalsize : (int)m_pMapdownloadTask->Size(); }
 
 	void PumpNetwork();
 

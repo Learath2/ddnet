@@ -310,6 +310,8 @@ CClient::CClient() : m_DemoPlayer(&m_SnapshotDelta)
 	// map download
 	m_aMapdownloadFilename[0] = 0;
 	m_aMapdownloadName[0] = 0;
+	m_pMapdownloadTask = 0;
+	m_MapdownloadHTTPAtt = false;
 	m_MapdownloadFile = 0;
 	m_MapdownloadChunk = 0;
 	m_MapdownloadCrc = 0;
@@ -735,8 +737,11 @@ void CClient::DisconnectWithReason(const char *pReason)
 
 	// disable all downloads
 	m_MapdownloadChunk = 0;
+	if(m_pMapdownloadTask)
+		m_pMapdownloadTask->Abort();
 	if(m_MapdownloadFile)
 		io_close(m_MapdownloadFile);
+	m_MapdownloadHTTPAtt = false;
 	m_MapdownloadFile = 0;
 	m_MapdownloadCrc = 0;
 	m_MapdownloadTotalsize = -1;
@@ -1556,6 +1561,7 @@ void CClient::ProcessServerPacket(CNetChunk *pPacket)
 					str_format(aUrl, sizeof(aUrl), "https://%s/%s_%08x.map", g_Config.m_ClDDNetMapServer, pMap, MapCrc);
 					m_pMapdownloadTask = new CFetchTask;
 					Fetcher()->QueueAdd(m_pMapdownloadTask, aUrl, m_aMapdownloadFilename, IStorage::TYPE_SAVE);
+					m_MapdownloadHTTPAtt = true;
 				}
 			}
 		}
@@ -2137,18 +2143,14 @@ void CClient::FinishMapDownload()
 		m_pConsole->Print(IConsole::OUTPUT_LEVEL_ADDINFO, "client/network", "loading done");
 		SendReady();
 	}
-	else if(m_pMapdownloadTask)
+	else if(m_MapdownloadHTTPAtt)
 	{
 		ResetMapDownload();
 		m_MapdownloadTotalsize = prev;
 		SendMapRequest();
 	}
-	else{
-		if(m_MapdownloadFile)
-			io_close(m_MapdownloadFile);
-		ResetMapDownload();
+	else
 		DisconnectWithReason(pError);
-	}
 }
 
 void CClient::PumpNetwork()
@@ -2412,13 +2414,20 @@ void CClient::Update()
 
 	// pump the network
 	PumpNetwork();
-	if(m_pMapdownloadTask){
+	if(m_pMapdownloadTask)
+	{
 		if(m_pMapdownloadTask->State() == CFetchTask::STATE_DONE)
 			FinishMapDownload();
-		else if(m_pMapdownloadTask->State() == CFetchTask::STATE_ERROR){
+		else if(m_pMapdownloadTask->State() == CFetchTask::STATE_ERROR)
+		{
 			dbg_msg("webdl", "HTTP failed falling back to gameserver.");
 			ResetMapDownload();
 			SendMapRequest();
+		}
+		else if(m_pMapdownloadTask->State() == CFetchTask::STATE_ABORTED)
+		{
+			delete m_pMapdownloadTask;
+			m_pMapdownloadTask = 0;
 		}
 	}
 
