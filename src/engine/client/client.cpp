@@ -49,8 +49,6 @@
 #include <mastersrv/mastersrv.h>
 #include <versionsrv/versionsrv.h>
 
-#include <engine/client/serverbrowser.h>
-
 #if defined(CONF_FAMILY_WINDOWS)
 	#define _WIN32_WINNT 0x0501
 	#define WIN32_LEAN_AND_MEAN
@@ -58,8 +56,8 @@
 #endif
 
 #include "friends.h"
-#include "serverbrowser.h"
 #include "fetcher.h"
+#include "serverbrowser.h"
 #include "autoupdate.h"
 #include "client.h"
 

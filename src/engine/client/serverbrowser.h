@@ -131,6 +131,8 @@ private:
 	
 	int m_NeedRefresh;
 
+	CFetchTask *m_pDownloadTask;
+
 	int m_NumSortedServers;
 	int m_NumSortedServersCapacity;
 	int m_NumServers;
@@ -154,10 +156,15 @@ private:
 	bool SortCompareNumPlayers(int Index1, int Index2) const;
 	bool SortCompareNumClients(int Index1, int Index2) const;
 
+	static int PlayerScoreComp(const void *a, const void *b);
+
 	//
 	void Filter();
 	void Sort();
 	int SortHash() const;
+
+	void FetchList();
+	void ParseList();
 
 	CServerEntry *Add(const NETADDR &Addr);
 

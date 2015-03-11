@@ -15,6 +15,7 @@
 #include <engine/friends.h>
 #include <engine/masterserver.h>
 #include <engine/storage.h>
+#include <engine/fetcher.h>
 
 #include <mastersrv/mastersrv.h>
 
@@ -125,6 +126,21 @@ bool CServerBrowser::SortCompareNumClients(int Index1, int Index2) const
 	CServerEntry *a = m_ppServerlist[Index1];
 	CServerEntry *b = m_ppServerlist[Index2];
 	return a->m_Info.m_NumClients < b->m_Info.m_NumClients;
+}
+
+int CServerBrowser::PlayerScoreComp(const void *a, const void *b)
+{
+	CServerInfo::CClient *p0 = (CServerInfo::CClient *)a;
+	CServerInfo::CClient *p1 = (CServerInfo::CClient *)b;
+	if(p0->m_Player && !p1->m_Player)
+		return -1;
+	if(!p0->m_Player && p1->m_Player)
+		return 1;
+	if(p0->m_Score == p1->m_Score)
+		return 0;
+	if(p0->m_Score < p1->m_Score)
+		return 1;
+	return -1;
 }
 
 void CServerBrowser::Filter()
@@ -479,9 +495,9 @@ void CServerBrowser::Set(const NETADDR &Addr, int Type, int Token, const CServer
 			QueueRequest(pEntry);
 		}
 	}
-	else if(Type == IServerBrowser::SET_TOKEN)
+	else if(Type == IServerBrowser::SET_TOKEN || Type == IServerBrowser::SET_DIRECT)
 	{
-		if(Token != m_CurrentToken)
+		if(Token != m_CurrentToken && Type != IServerBrowser::SET_DIRECT)
 			return;
 
 		pEntry = Find(Addr);
@@ -548,8 +564,16 @@ void CServerBrowser::Refresh(int Type)
 		if(g_Config.m_Debug)
 			m_pConsole->Print(IConsole::OUTPUT_LEVEL_DEBUG, "client_srvbrowse", "broadcasting for servers");
 	}
-	else if(Type == IServerBrowser::TYPE_INTERNET)
-		m_NeedRefresh = 1;
+	else if(Type == IServerBrowser::TYPE_INTERNET){
+		if(!g_Config.m_ClHttpSrvList)
+			m_NeedRefresh = 1;
+		else{
+			if(!m_pDownloadTask)
+				FetchList();
+			else
+				m_pDownloadTask->Abort();
+		}
+	}
 	else if(Type == IServerBrowser::TYPE_FAVORITES)
 	{
 		for(int i = 0; i < m_NumFavoriteServers; i++)
@@ -645,6 +669,62 @@ void CServerBrowser::Request(const NETADDR &Addr) const
 	RequestImpl(Addr, 0);
 }
 
+void CServerBrowser::FetchList()
+{
+	IFetcher *m_pFetcher = Kernel()->RequestInterface<IFetcher>();
+	CFetchTask *m_pDownloadTask = new CFetchTask;
+	m_pFetcher->QueueAdd(m_pDownloadTask, "http://learath2.info/srvrlist.json", "srvlist.json", IStorage::TYPE_SAVE);
+}
+
+void CServerBrowser::ParseList()
+{
+	IStorage *pStorage = Kernel()->RequestInterface<IStorage>();
+	IOHANDLE File = pStorage->OpenFile("srvlist.json", IOFLAG_READ, IStorage::TYPE_ALL);
+
+	char aBuf[4096*4];
+	mem_zero(aBuf, sizeof(aBuf));
+
+	io_read(File, aBuf, sizeof(aBuf));
+	io_close(File);
+
+	json_value *pServers = json_parse(aBuf);
+
+	if(pServers && pServers->type == json_array)
+	{
+		for(int i = 0; i < json_array_length(pServers); i++)
+		{
+			CServerInfo Info = {0};
+			json_value Server = (*pServers)[i];
+			str_copy(Info.m_aAddress, Server["address"], sizeof(Info.m_aAddress));
+			str_copy(Info.m_aVersion, Server["version"], sizeof(Info.m_aVersion));
+			str_copy(Info.m_aMap, Server["mapname"], sizeof(Info.m_aMap));
+			str_copy(Info.m_aGameType, Server["gametype"], sizeof(Info.m_aGameType));
+			Info.m_Flags = Server["flags"];
+			Info.m_NumPlayers = Server["players"];
+			Info.m_MaxPlayers = Server["maxplayers"];
+			Info.m_NumClients = Server["clients"];
+			Info.m_MaxClients = Server["maxclients"];
+
+			if(Info.m_NumClients < 0 || Info.m_NumClients > MAX_CLIENTS || Info.m_MaxClients < 0 || Info.m_MaxClients > MAX_CLIENTS ||
+				Info.m_NumPlayers < 0 || Info.m_NumPlayers > Info.m_NumClients || Info.m_MaxPlayers < 0 || Info.m_MaxPlayers > Info.m_MaxClients)
+				return;
+
+			for(int i = 0; i < json_array_length(&(Server["clients"])); i++)
+			{
+				json_value Client = Server["clients"][i];
+				str_copy(Info.m_aClients[i].m_aName, Client["name"], sizeof(Info.m_aClients[i].m_aName));
+				str_copy(Info.m_aClients[i].m_aClan, Client["clan"], sizeof(Info.m_aClients[i].m_aClan));
+				Info.m_aClients[i].m_Country = Client["country"];
+				Info.m_aClients[i].m_Score = Client["score"];
+				Info.m_aClients[i].m_Player = Client["player"];
+			}
+			qsort(Info.m_aClients, Info.m_NumClients, sizeof(*Info.m_aClients), PlayerScoreComp);
+			NETADDR Addr;
+			net_addr_from_str(&Addr, Info.m_aAddress);
+			Set(Addr, SET_DIRECT, 0, &Info);
+		}
+	}
+}
 
 void CServerBrowser::Update(bool ForceResort)
 {	
@@ -652,6 +732,22 @@ void CServerBrowser::Update(bool ForceResort)
 	int64 Now = time_get();
 	int Count;
 	CServerEntry *pEntry, *pNext;
+
+	if(m_pDownloadTask)
+	{
+		if(m_pDownloadTask->State() == CFetchTask::STATE_DONE)
+		{
+			ParseList();
+			delete m_pDownloadTask;
+			m_pDownloadTask = 0;
+		}
+		else if(m_pDownloadTask->State() == CFetchTask::STATE_ABORTED)
+		{
+			delete m_pDownloadTask;
+			m_pDownloadTask = 0;
+			FetchList();
+		}
+	}
 	
 	// do server list requests
 	if(m_NeedRefresh && !m_pMasterServer->IsRefreshing())
