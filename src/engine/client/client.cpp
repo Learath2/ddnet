@@ -56,6 +56,10 @@
 	#include <windows.h>
 #endif
 
+#if defined(CONF_FAMILY_UNIX)
+    #include <X11/Xlib.h>
+#endif
+
 #include "friends.h"
 #include "serverbrowser.h"
 #include "fetcher.h"
@@ -3183,6 +3187,10 @@ int main(int argc, const char **argv) // ignore_convention
 			break;
 		}
 	}
+#endif
+
+#if defined(CONF_FAMILY_UNIX)
+	XinitThreads();
 #endif
 
 #if !defined(CONF_PLATFORM_MACOSX)
