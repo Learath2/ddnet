@@ -138,6 +138,11 @@ public:
 		int m_LastAuthed;
 		int m_AuthTries;
 
+		char m_aUname[MAX_NAME_LENGTH];
+		unsigned char m_aFprint[20];
+		unsigned char m_aRand[10];
+		bool m_Verified;
+
 		const IConsole::CCommandInfo *m_pRconCmdToSend;
 
 		void Reset();

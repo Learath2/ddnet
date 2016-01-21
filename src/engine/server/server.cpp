@@ -1231,6 +1231,32 @@ void CServer::ProcessClientPacket(CNetChunk *pPacket)
 				}
 			}
 		}
+		else if (Msg == NETMSG_DD_AUTH_START)
+		{
+			const unsigned char *aBuf = Msg.GetRaw(20);
+			str_copy(m_aClients[ClientID].m_aFprint, aBuf, 20);
+			secure_random_fill(m_aClients[ClientID].m_aRand, 10);
+
+			CMsgPacker Msg(NETMSG_DD_AUTH_CHLG);
+			Msg.AddRaw(m_aClients[ClientID].m_aRand, 10);
+			SendMsgEx(&Msg, MSGFLAG_VITAL, ClientID, true);
+		}
+		else if(Msg == NETMSG_DD_AUTH_RESP)
+		{
+			const unsigned char *resp = Msg.GetRaw(AUTH_KEYSIZE/8);
+			//OpenSSL_Cheeky_RSA pubkey = Database_get_pubkey(m_aClients[ClientID].m_aFprint);
+			//bool verify = OpenSSL_Cheeky_RSA_Verify_fnc_Ex__(m_aClients[ClientID].m_aRand, pubkey, resp);
+			if(verify)
+			{
+				m_aClients[ClientID].m_Verified = true;
+				//char *uname = Database_get_uname(m_aClients[ClientID].m_aFprint);
+				str_copy(m_aClients[ClientID].m_Uname, uname, sizeof m_aClients[ClientID].m_Uname);
+			}
+			else
+			{
+				m_NetServer.Drop(ClientID, "Sod off wanker...");
+			}
+		}
 		else if(Msg == NETMSG_PING)
 		{
 			CMsgPacker Msg(NETMSG_PING_REPLY);

@@ -439,6 +439,15 @@ void CClient::RconAuth(const char *pName, const char *pPassword)
 	SendMsgEx(&Msg, MSGFLAG_VITAL);
 }
 
+void CClient::SendAuth()
+{
+	//OpenSSL_Cheeky_RSA_key key = OpenSSL_Cheeky_Parse_Key_File(KeyFilepath);
+	//unsigned char fprint[20] = OpenSSL_Cheeky_Calculate_RSA_Fprint(key);
+	CMsgPacker Msg(NETMSG_DD_AUTH_START);
+	Msg.AddRaw(fprint, sizeof fprint);
+	SendMsgEx(&Msg, MSGFLAG_VITAL);
+}
+
 void CClient::Rcon(const char *pCmd)
 {
 	CServerInfo Info;
@@ -1887,6 +1896,15 @@ void CClient::ProcessServerPacket(CNetChunk *pPacket)
 					m_AckGameTick[g_Config.m_ClDummy] = GameTick;
 				}
 			}
+		}
+		else if(Msg == NETMSG_DD_AUTH_CHLG)
+		{
+			//OpenSSL_Cheeky_RSA_key key = OpenSSL_Cheeky_Parse_Key_File(The_Keyfile_Path);
+			const unsigned char challange[10] = Msg.GetRaw(10);
+			//unsigned char signature[AUTH_KEYSIZE/8] = OpenSSL_Cheeky_Sign_fnc_Ex__(key, challange);
+			CMsgPacker Msg(NETMSG_DD_AUTH_RESP);
+			Msg.AddRaw(signature, sizeof signature);
+			SendMsgEx(&Msg, MSGFLAG_VITAL);
 		}
 	}
 	else
