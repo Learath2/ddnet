@@ -723,39 +723,43 @@ void CMenus::RenderSettingsControls(CUIRect MainView)
 		MovementSettings.HSplitTop(14.0f+5.0f+10.0f, 0, &MovementSettings);
 
 		{
-			CUIRect Input, Button, Label;
+			CUIRect EditBox, Button, Label;
 			MovementSettings.HSplitTop(20.0f, &Button, &MovementSettings);
 			Button.VSplitLeft(135.0f, &Label, &Button);
-			Button.VSplitRight(40.0f, &Button, &Input);
-			
+			Button.VSplitRight(40.0f, &Button, &EditBox);
+
 			UI()->DoLabel(&Label, Localize("Mouse sens."), 14.0f*UI()->Scale(), -1);
-			
-			char aBuf[64];
-			str_format(aBuf, sizeof(aBuf), "%d", g_Config.m_InpMousesens);
-			
+
 			static float s_Offset = 0.0f;
 			static int s_SensitivityEditBox = 0;
-			if (DoEditBox(&s_SensitivityEditBox, &Input, aBuf, sizeof(aBuf), 14.0f, &s_Offset))
-			{
-				bool Valid = true;
-				for (int i = 0; i < sizeof(aBuf); i++)
-				{
-					if (aBuf[i] == '\0') 
-						break;
-					if (aBuf[i] < '0' || aBuf[i] > '9')
-					{
-						Valid = false;
-						break;
-					}
+
+			static char s_aBuf[5] = {'\0'};
+			if(UI()->LastActiveItem() == &g_Config.m_InpMousesens || (UI()->LastActiveItem() != &s_SensitivityEditBox && !s_aBuf[0]))
+				str_format(s_aBuf, sizeof(s_aBuf), "%d", g_Config.m_InpMousesens);
+
+			DoEditBox(&s_SensitivityEditBox, &EditBox, s_aBuf, sizeof(s_aBuf), 14.0f, &s_Offset);
+			if(s_aBuf[0] && UI()->LastActiveItem() == &s_SensitivityEditBox && (Input()->KeyIsPressed(KEY_RETURN) || Input()->KeyIsPressed(KEY_KP_ENTER))){
+				char *end = NULL;
+				int val = strtol(s_aBuf, &end, 10);
+				if(!*end && val == clamp(val, 5, 100000)){
+					g_Config.m_InpMousesens = clamp(val ,5, 100000);
 				}
-				// TODO: <Learath2> could have a static buffer and when one presses enter you try to assign. if invalid then put old value
-				if (Valid && aBuf[0] != '\0')
-					g_Config.m_InpMousesens = strtol(aBuf, NULL, 10);
+				else{
+					s_aBuf[0] = '\0';
+					UI()->ClearLastActiveItem();
+				}
+
 			}
 
 			Button.HMargin(2.0f, &Button);
 			Button.VSplitRight(10.0f, &Button, 0);
-			g_Config.m_InpMousesens = (int)(DoScrollbarH(&g_Config.m_InpMousesens, &Button, (g_Config.m_InpMousesens-5)/500.0f)*500.0f)+5;
+			if(g_Config.m_InpMousesens <= 505)
+				g_Config.m_InpMousesens = (int)(DoScrollbarH(&g_Config.m_InpMousesens, &Button, (g_Config.m_InpMousesens - 5)/500.0f)*500.0f)+5;
+			else{
+				float r = 0;
+				if((r = DoScrollbarH(&g_Config.m_InpMousesens, &Button, 1.0f) < 1.0f))
+					g_Config.m_InpMousesens = r * 500.0f;
+			}
 			//*key.key = ui_do_key_reader(key.key, &Button, *key.key);
 			MovementSettings.HSplitTop(20.0f, 0, &MovementSettings);
 		}
