@@ -723,11 +723,38 @@ void CMenus::RenderSettingsControls(CUIRect MainView)
 		MovementSettings.HSplitTop(14.0f+5.0f+10.0f, 0, &MovementSettings);
 
 		{
-			CUIRect Button, Label;
+			CUIRect Input, Button, Label;
 			MovementSettings.HSplitTop(20.0f, &Button, &MovementSettings);
 			Button.VSplitLeft(135.0f, &Label, &Button);
+			Button.VSplitRight(40.0f, &Button, &Input);
+			
 			UI()->DoLabel(&Label, Localize("Mouse sens."), 14.0f*UI()->Scale(), -1);
+			
+			char aBuf[64];
+			str_format(aBuf, sizeof(aBuf), "%d", g_Config.m_InpMousesens);
+			
+			static float s_Offset = 0.0f;
+			static int s_SensitivityEditBox = 0;
+			if (DoEditBox(&s_SensitivityEditBox, &Input, aBuf, sizeof(aBuf), 14.0f, &s_Offset))
+			{
+				bool Valid = true;
+				for (int i = 0; i < sizeof(aBuf); i++)
+				{
+					if (aBuf[i] == '\0') 
+						break;
+					if (aBuf[i] < '0' || aBuf[i] > '9')
+					{
+						Valid = false;
+						break;
+					}
+				}
+				// TODO: <Learath2> could have a static buffer and when one presses enter you try to assign. if invalid then put old value
+				if (Valid && aBuf[0] != '\0')
+					g_Config.m_InpMousesens = strtol(aBuf, NULL, 10);
+			}
+
 			Button.HMargin(2.0f, &Button);
+			Button.VSplitRight(10.0f, &Button, 0);
 			g_Config.m_InpMousesens = (int)(DoScrollbarH(&g_Config.m_InpMousesens, &Button, (g_Config.m_InpMousesens-5)/500.0f)*500.0f)+5;
 			//*key.key = ui_do_key_reader(key.key, &Button, *key.key);
 			MovementSettings.HSplitTop(20.0f, 0, &MovementSettings);
