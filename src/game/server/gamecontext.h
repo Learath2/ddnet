@@ -147,17 +147,21 @@ public:
 	char m_aVoteReason[VOTE_REASON_LENGTH];
 	int m_NumVoteOptions;
 	int m_VoteEnforce;
+	bool m_VoteHold;
+	int m_VoteResult;
+	bool m_VoteVetoable;
 	char m_aaZoneEnterMsg[NUM_TUNEZONES][256]; // 0 is used for switching from or to area without tunings
 	char m_aaZoneLeaveMsg[NUM_TUNEZONES][256];
+	int m_VoteWatch;
 
 	char m_aDeleteTempfile[128];
 	void DeleteTempfile();
 
 	enum
 	{
-		VOTE_ENFORCE_UNKNOWN=0,
-		VOTE_ENFORCE_NO,
-		VOTE_ENFORCE_YES,
+		VOTE_UNDEFINED = 0,
+		VOTE_FAIL,
+		VOTE_PASS
 	};
 	CHeap *m_pVoteOptionHeap;
 	CVoteOptionServer *m_pVoteOptionFirst;
@@ -248,7 +252,7 @@ public:
 
 private:
 
-	bool m_VoteWillPass;
+	int m_VoteWillPass;
 	class IScore *m_pScore;
 
 	//DDRace Console Commands
@@ -342,6 +346,7 @@ private:
 	static void ConMuteIP(IConsole::IResult *pResult, void *pUserData);
 	static void ConUnmute(IConsole::IResult *pResult, void *pUserData);
 	static void ConMutes(IConsole::IResult *pResult, void *pUserData);
+	static void ConWatchVotes(IConsole::IResult *pResult, void *pUserData);
 
 	static void ConList(IConsole::IResult *pResult, void *pUserData);
 	static void ConSetDDRTeam(IConsole::IResult *pResult, void *pUserData);
@@ -372,8 +377,10 @@ public:
 	bool m_VoteSpec;
 	enum
 	{
-		VOTE_ENFORCE_NO_ADMIN = VOTE_ENFORCE_YES + 1,
-		VOTE_ENFORCE_YES_ADMIN
+		VOTE_ENFORCE_NONE = 0,
+		VOTE_ENFORCE_YES,
+		VOTE_ENFORCE_NO,
+		VOTE_ENFORCE_VETO
 	};
 	int m_VoteEnforcer;
 	void SendRecord(int ClientID);

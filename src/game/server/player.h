@@ -171,6 +171,7 @@ public:
 	bool m_SpecTeam;
 	bool m_NinjaJetpack;
 	bool m_Afk;
+	bool m_VoteWatch;
 	int m_KillMe;
 	bool m_HasFinishScore;
 

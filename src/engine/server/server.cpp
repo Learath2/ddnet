@@ -2588,6 +2588,8 @@ void CServer::LogoutClient(int ClientID, const char *pReason)
 	m_aClients[ClientID].m_Authed = AUTHED_NO;
 	m_aClients[ClientID].m_AuthKey = -1;
 
+	GameServer()->OnSetAuthed(ClientID, AUTHED_NO);
+
 	Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "server", aBuf);
 }
 

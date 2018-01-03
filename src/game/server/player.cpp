@@ -66,6 +66,7 @@ void CPlayer::Reset()
 	m_TimerType = (g_Config.m_SvDefaultTimerType == CPlayer::TIMERTYPE_GAMETIMER || g_Config.m_SvDefaultTimerType == CPlayer::TIMERTYPE_GAMETIMER_AND_BROADCAST) ? CPlayer::TIMERTYPE_BROADCAST : g_Config.m_SvDefaultTimerType;
 	m_DefEmote = EMOTE_NORMAL;
 	m_Afk = false;
+	m_VoteWatch = false;
 	m_LastWhisperTo = -1;
 	m_LastSetSpectatorMode = 0;
 	m_TimeoutCode[0] = '\0';
@@ -633,10 +634,14 @@ void CPlayer::AfkVoteTimer(CNetObj_PlayerInput *NewTarget)
 	else if(m_LastPlaytime < time_get()-time_freq()*g_Config.m_SvMaxAfkVoteTime)
 	{
 		m_Afk = true;
+		if(m_VoteWatch)
+			GameServer()->m_VoteUpdate = true;
 		return;
 	}
 
 	m_Afk = false;
+	if(m_VoteWatch)
+		GameServer()->m_VoteUpdate = true;
 }
 
 void CPlayer::ProcessPause()

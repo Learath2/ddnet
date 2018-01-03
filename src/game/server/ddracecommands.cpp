@@ -461,6 +461,14 @@ void CGameContext::ConMutes(IConsole::IResult *pResult, void *pUserData)
 	}
 }
 
+void CGameContext::ConWatchVotes(IConsole::IResult *pResult, void *pUserData)
+{
+	CGameContext *pSelf = (CGameContext *)pUserData;
+
+	pSelf->m_apPlayers[pResult->m_ClientID]->m_VoteWatch = !pSelf->m_apPlayers[pResult->m_ClientID]->m_VoteWatch;
+	pSelf->m_VoteUpdate = true;
+}
+
 void CGameContext::ConList(IConsole::IResult *pResult, void *pUserData)
 {
 	CGameContext *pSelf = (CGameContext *)pUserData;

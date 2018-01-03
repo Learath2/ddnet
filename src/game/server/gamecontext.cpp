@@ -408,7 +408,7 @@ void CGameContext::SendBroadcast(const char *pText, int ClientID)
 void CGameContext::StartVote(const char *pDesc, const char *pCommand, const char *pReason)
 {
 	// reset votes
-	m_VoteEnforce = VOTE_ENFORCE_UNKNOWN;
+	m_VoteEnforce = VOTE_ENFORCE_NONE;
 	m_VoteEnforcer = -1;
 	for(int i = 0; i < MAX_CLIENTS; i++)
 	{
@@ -675,9 +675,12 @@ void CGameContext::OnTick()
 		else
 		{
 			int Total = 0, Yes = 0, No = 0;
-			bool Veto = false, VetoStop = false;
 			if(m_VoteUpdate)
 			{
+				m_VoteResult = VOTE_UNDEFINED;
+				m_VoteHold = false;
+				m_VoteVetoable = false;
+
 				// count votes
 				char aaBuf[MAX_CLIENTS][NETADDR_MAXSTRSIZE] = {{0}};
 				for(int i = 0; i < MAX_CLIENTS; i++)
@@ -732,76 +735,88 @@ void CGameContext::OnTick()
 					if(!m_VoteKick && !m_VoteSpec && m_apPlayers[i] &&
 						!m_apPlayers[i]->m_Afk && m_apPlayers[i]->GetTeam() != TEAM_SPECTATORS &&
 						g_Config.m_SvVoteVetoTime &&
-						((Server()->Tick() - m_apPlayers[i]->m_JoinTick) / (Server()->TickSpeed() * 60) > g_Config.m_SvVoteVetoTime ||
-						 (m_apPlayers[i]->GetCharacter() && (Server()->Tick() - m_apPlayers[i]->GetCharacter()->m_StartTime) / (Server()->TickSpeed() * 60) > g_Config.m_SvVoteVetoTime)))
+						 m_apPlayers[i]->GetCharacter() && (Server()->Tick() - m_apPlayers[i]->GetCharacter()->m_StartTime) / (Server()->TickSpeed() * 60) > g_Config.m_SvVoteVetoTime)
 					{
-						if(ActVote == 0)
-							Veto = true;
+						if(!ActVote)
+							m_VoteVetoable = true;
 						else if(ActVote < 0)
-							VetoStop = true;
+						{
+							m_VoteEnforce = VOTE_ENFORCE_VETO;
+							break;
+						}
+					}
+
+					// allow watching moderators to decide any vote
+					if(m_apPlayers[i]->m_VoteWatch && !m_apPlayers[i]->m_Afk)
+					{
+						if(!ActVote)
+							m_VoteHold = true;
+						else if(ActVote < 0)
+							m_VoteEnforce = VOTE_ENFORCE_NO;
 					}
 				}
 
-				if(g_Config.m_SvVoteMaxTotal && Total > g_Config.m_SvVoteMaxTotal &&
-						(m_VoteKick || m_VoteSpec))
-					Total = g_Config.m_SvVoteMaxTotal;
-
-				if((Yes > Total / (100.0 / g_Config.m_SvVoteYesPercentage)) && !Veto)
-					m_VoteEnforce = VOTE_ENFORCE_YES;
-				else if(No >= Total - Total / (100.0 / g_Config.m_SvVoteYesPercentage))
-					m_VoteEnforce = VOTE_ENFORCE_NO;
-
-				if(VetoStop)
-					m_VoteEnforce = VOTE_ENFORCE_NO;
-
-				m_VoteWillPass = Yes > (Yes + No) / (100.0 / g_Config.m_SvVoteYesPercentage);
-			}
-
-			if(time_get() > m_VoteCloseTime && !g_Config.m_SvVoteMajority)
-				m_VoteEnforce = (m_VoteWillPass && !Veto) ? VOTE_ENFORCE_YES : VOTE_ENFORCE_NO;
-
-			if(m_VoteEnforce == VOTE_ENFORCE_YES)
-			{
-				Server()->SetRconCID(IServer::RCON_CID_VOTE);
-				Console()->ExecuteLine(m_aVoteCommand);
-				Server()->SetRconCID(IServer::RCON_CID_SERV);
-				EndVote();
-				SendChat(-1, CGameContext::CHAT_ALL, "Vote passed");
-
-				if(m_apPlayers[m_VoteCreator] && !m_VoteKick && !m_VoteSpec)
-					m_apPlayers[m_VoteCreator]->m_LastVoteCall = 0;
-			}
-			else if(m_VoteEnforce == VOTE_ENFORCE_YES_ADMIN)
-			{
-				char aBuf[64];
-				str_format(aBuf, sizeof(aBuf),"Vote passed enforced by server moderator");
-				Console()->ExecuteLine(m_aVoteCommand, m_VoteEnforcer);
-				SendChat(-1, CGameContext::CHAT_ALL, aBuf);
-				EndVote();
-			}
-			else if(m_VoteEnforce == VOTE_ENFORCE_NO_ADMIN)
-			{
-				char aBuf[64];
-				str_format(aBuf, sizeof(aBuf),"Vote failed enforced by server moderator");
-				EndVote();
-				SendChat(-1, CGameContext::CHAT_ALL, aBuf);
-			}
-			//else if(m_VoteEnforce == VOTE_ENFORCE_NO || time_get() > m_VoteCloseTime)
-			else if(m_VoteEnforce == VOTE_ENFORCE_NO || (time_get() > m_VoteCloseTime && g_Config.m_SvVoteMajority))
-			{
-				EndVote();
-				if(VetoStop || (m_VoteWillPass && Veto))
-					SendChat(-1, CGameContext::CHAT_ALL, "Vote failed because of veto. Find an empty server instead");
+				if(!g_Config.m_SvVoteMajority)
+				{
+					if(m_VoteVetoable)
+						m_VoteResult = VOTE_FAIL;
+					else if(Yes > Total / (100.0f / g_Config.m_SvVoteYesPercentage))
+						m_VoteResult = VOTE_PASS;
+					else if(No > Total - Total / (100.0f / g_Config.m_SvVoteYesPercentage))
+						m_VoteResult = VOTE_FAIL;
+				}
 				else
-					SendChat(-1, CGameContext::CHAT_ALL, "Vote failed");
+				{
+					if(m_VoteVetoable)
+						m_VoteResult = VOTE_FAIL;
+					else if(Yes > No)
+						m_VoteResult = VOTE_PASS;
+					else if(Yes < No)
+						m_VoteResult = VOTE_FAIL;
+				}
 			}
-			else if(m_VoteUpdate)
+
+			switch(m_VoteEnforce)
+			{
+			case VOTE_ENFORCE_YES:
+				Console()->ExecuteLine(m_aVoteCommand);
+				SendChat(-1, CGameContext::CHAT_ALL, "Vote passed enforced by moderator");
+				EndVote();
+				goto end;
+			case VOTE_ENFORCE_NO:
+				SendChat(-1, CGameContext::CHAT_ALL, "Vote failed enforced by moderator");
+				EndVote();
+				goto end;
+			case VOTE_ENFORCE_VETO:
+				SendChat(-1, CGameContext::CHAT_ALL, "Vote failed by veto. Find an empty server instead");
+				EndVote();
+				goto end;
+			}
+
+			if(!m_VoteHold && (!g_Config.m_SvVoteMajority || time_get() > m_VoteCloseTime))
+			{
+				switch(m_VoteResult)
+				{
+				case VOTE_PASS:
+					SendChat(-1, CGameContext::CHAT_ALL, "Vote passed");
+					EndVote();
+					goto end;
+				case VOTE_FAIL:
+					SendChat(-1, CGameContext::CHAT_ALL, "Vote failed");
+					EndVote();
+					goto end;
+				}
+			}
+
+			if(m_VoteUpdate)
 			{
 				m_VoteUpdate = false;
 				for(int i = 0; i < MAX_CLIENTS; ++i)
 					if(Server()->ClientIngame(i))
 						SendVoteStatus(i, Total, Yes, No);
 			}
+
+			end:;
 		}
 	}
 	for(int i = 0; i < m_NumMutes; i++)
@@ -1376,18 +1391,6 @@ void CGameContext::OnMessage(int MsgID, CUnpacker *pUnpacker, int ClientID)
 					SendChatTarget(ClientID, "Server does not allow voting to kick players");
 					m_apPlayers[ClientID]->m_Last_KickVote = time_get();
 					return;
-				}
-
-				if(g_Config.m_SvVoteKickModerated)
-				{
-					for(int i = 0; i < MAX_CLIENTS; i++)
-					{
-						if(m_apPlayers[i]->m_Authed > IServer::AUTHED_HELPER && !m_apPlayers[i]->m_Afk)
-						{
-							SendChatTarget(ClientID, "Can't vote kick while there is a moderator on the server");
-							return;
-						}
-					}
 				}
 
 				if(g_Config.m_SvVoteKickMin)
@@ -2390,9 +2393,9 @@ void CGameContext::ConVote(IConsole::IResult *pResult, void *pUserData)
 		return;
 
 	if(str_comp_nocase(pResult->GetString(0), "yes") == 0)
-		pSelf->m_VoteEnforce = CGameContext::VOTE_ENFORCE_YES_ADMIN;
+		pSelf->m_VoteEnforce = CGameContext::VOTE_ENFORCE_YES;
 	else if(str_comp_nocase(pResult->GetString(0), "no") == 0)
-		pSelf->m_VoteEnforce = CGameContext::VOTE_ENFORCE_NO_ADMIN;
+		pSelf->m_VoteEnforce = CGameContext::VOTE_ENFORCE_NO;
 	pSelf->m_VoteEnforcer = pResult->m_ClientID;
 	char aBuf[256];
 	str_format(aBuf, sizeof(aBuf), "moderator forced vote %s", pResult->GetString(0));
@@ -3063,7 +3066,7 @@ void CGameContext::OnSetAuthed(int ClientID, int Level)
 		str_format(aBuf, sizeof(aBuf), "ban %s %d Banned by vote", aIP, g_Config.m_SvVoteKickBantime);
 		if(!str_comp_nocase(m_aVoteCommand, aBuf) && Level > 0)
 		{
-			m_VoteEnforce = CGameContext::VOTE_ENFORCE_NO_ADMIN;
+			m_VoteEnforce = CGameContext::VOTE_ENFORCE_NO;
 			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "CGameContext", "Aborted vote by admin login.");
 		}
 	}
