@@ -15,6 +15,7 @@
 #include "gameworld.h"
 #include "player.h"
 #include "teehistorian.h"
+#include "vote.h"
 
 #include "score.h"
 #ifdef _MSC_VER
@@ -137,29 +138,18 @@ public:
 	void EndVote();
 	void SendVoteSet(int ClientID);
 	void SendVoteStatus(int ClientID, int Total, int Yes, int No);
-	void AbortVoteKickOnDisconnect(int ClientID);
 
-	int m_VoteCreator;
-	int64 m_VoteCloseTime;
+	CVote *m_pVote;
+
 	bool m_VoteUpdate;
 	int m_VotePos;
-	char m_aVoteDescription[VOTE_DESC_LENGTH];
-	char m_aVoteCommand[VOTE_CMD_LENGTH];
-	char m_aVoteReason[VOTE_REASON_LENGTH];
 	int m_NumVoteOptions;
-	int m_VoteEnforce;
 	char m_aaZoneEnterMsg[NUM_TUNEZONES][256]; // 0 is used for switching from or to area without tunings
 	char m_aaZoneLeaveMsg[NUM_TUNEZONES][256];
 
 	char m_aDeleteTempfile[128];
 	void DeleteTempfile();
 
-	enum
-	{
-		VOTE_ENFORCE_UNKNOWN=0,
-		VOTE_ENFORCE_NO,
-		VOTE_ENFORCE_YES,
-	};
 	CHeap *m_pVoteOptionHeap;
 	CVoteOptionServer *m_pVoteOptionFirst;
 	CVoteOptionServer *m_pVoteOptionLast;
@@ -185,7 +175,7 @@ public:
 	};
 
 	// network
-	void CallVote(int ClientID, const char *aDesc, const char *aCmd, const char *pReason, const char *aChatmsg);
+	void CallVote(int ClientID, const char *aDesc, const char *aCmd, const char *pReason, const char *aChatmsg, int Type = CVote::VOTE_TYPE_OPT);
 	void SendChatTarget(int To, const char *pText);
 	void SendChatTeam(int Team, const char *pText);
 	void SendChat(int ClientID, int Team, const char *pText, int SpamProtectionClientID = -1);
@@ -371,14 +361,6 @@ private:
 public:
 	CLayers *Layers() { return &m_Layers; }
 	class IScore *Score() { return m_pScore; }
-	bool m_VoteKick;
-	bool m_VoteSpec;
-	enum
-	{
-		VOTE_ENFORCE_NO_ADMIN = VOTE_ENFORCE_YES + 1,
-		VOTE_ENFORCE_YES_ADMIN
-	};
-	int m_VoteEnforcer;
 	void SendRecord(int ClientID);
 	static void SendChatResponse(const char *pLine, void *pUser, bool Highlighted = false);
 	static void SendChatResponseAll(const char *pLine, void *pUser);

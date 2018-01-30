@@ -1029,6 +1029,8 @@ set_glob(GAME_SERVER GLOB_RECURSE src/game/server
   teams.h
   teehistorian.cpp
   teehistorian.h
+  vote.cpp
+  vote.h
 )
 set(GAME_GENERATED_SERVER
   "src/game/generated/server_data.cpp"
@@ -1156,6 +1158,7 @@ if(GTEST_FOUND OR DOWNLOAD_GTEST)
     test.h
     thread.cpp
     unix.cpp
+    vote.cpp
   )
   set(TESTS_EXTRA
     src/game/server/teehistorian.cpp
