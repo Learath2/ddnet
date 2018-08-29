@@ -126,7 +126,7 @@ void SendEnterGame()
 
 void Tick()
 {
-    g_NetClient.Update();
+	g_NetClient.Update();
 
 	if(g_State != IClient::STATE_OFFLINE && g_State != IClient::STATE_QUITING && g_NetClient.State() == NETSTATE_OFFLINE)
 	{
@@ -144,30 +144,30 @@ void Tick()
 		SendInfo();
 	}
 
-    CNetChunk Packet;
-    while(g_NetClient.Recv(&Packet))
-    {
-        CUnpacker Unpacker;
-        Unpacker.Reset(Packet.m_pData, Packet.m_DataSize);
-        CMsgPacker Packer(NETMSG_EX);
+	CNetChunk Packet;
+	while(g_NetClient.Recv(&Packet))
+	{
+		CUnpacker Unpacker;
+		Unpacker.Reset(Packet.m_pData, Packet.m_DataSize);
+		CMsgPacker Packer(NETMSG_EX);
 
-        int Msg;
-        bool Sys;
-        CUuid Uuid;
+		int Msg;
+		bool Sys;
+		CUuid Uuid;
 
-        int Result = UnpackMessageID(&Msg, &Sys, &Uuid, &Unpacker, &Packer);
-        if(Result == UNPACKMESSAGE_ERROR)
-        {
-            return;
-        }
-        else if(Result == UNPACKMESSAGE_ANSWER)
-        {
-            SendMsgEx(&Packer, MSGFLAG_VITAL, true);
-        }
+		int Result = UnpackMessageID(&Msg, &Sys, &Uuid, &Unpacker, &Packer);
+		if(Result == UNPACKMESSAGE_ERROR)
+		{
+			return;
+		}
+		else if(Result == UNPACKMESSAGE_ANSWER)
+		{
+			SendMsgEx(&Packer, MSGFLAG_VITAL, true);
+		}
 
-        char aBuf[UUID_MAXSTRSIZE];
-        FormatUuid(Uuid, aBuf, sizeof aBuf);
-        //dbg_msg("client", "Packet %d %s %s", Msg, Sys?"true":"false", aBuf);
+		char aBuf[UUID_MAXSTRSIZE];
+		FormatUuid(Uuid, aBuf, sizeof aBuf);
+		//dbg_msg("client", "Packet %d %s %s", Msg, Sys?"true":"false", aBuf);
 		if(Sys)
 		{
 			if(Msg == NETMSG_MAP_CHANGE)
@@ -203,7 +203,7 @@ void Tick()
 				}
 			}
 		}
-    }
+	}
 }
 
 int main(int argc, char **argv)
@@ -229,11 +229,11 @@ int main(int argc, char **argv)
 	if(Addr.port == 0)
 		Addr.port = 8303;
 
-    if(secure_random_init() != 0)
-    {
-        fprintf(stderr, "couldn't initialize secure_random\n");
-        return 1;
-    }
+	if(secure_random_init() != 0)
+	{
+		fprintf(stderr, "couldn't initialize secure_random\n");
+		return 1;
+	}
 
 	IKernel *pKernel = IKernel::Create();
 	IConfig *pConfig = CreateConfig();
@@ -256,8 +256,8 @@ int main(int argc, char **argv)
 
 	Connect(&Addr);
 
-    while(g_Running)
-    {
-        Tick();
-    }
+	while(g_Running)
+	{
+		Tick();
+	}
 }
