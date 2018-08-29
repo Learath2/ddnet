@@ -242,7 +242,7 @@ int main(int argc, char **argv)
 
 	pConfig->Init();
 
-	CNetBase::OpenLog(io_open("sent", IOFLAG_WRITE), io_open("recieveth", IOFLAG_WRITE));
+	CNetBase::OpenLog(io_open("sent", IOFLAG_WRITE), io_open("receiveth", IOFLAG_WRITE));
 
 	NETADDR BindAddr;
 	mem_zero(&BindAddr, sizeof(BindAddr));
