@@ -247,7 +247,7 @@ int main(int argc, char **argv)
 	NETADDR BindAddr;
 	mem_zero(&BindAddr, sizeof(BindAddr));
 	BindAddr.type = NETTYPE_ALL;
-    BindAddr.port = (secure_rand() % 64511) + 1024;
+	BindAddr.port = (secure_rand() % 64511) + 1024;
 
 	g_NetClient.Open(BindAddr, 0);
 
