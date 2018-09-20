@@ -2,11 +2,16 @@
 #include "gamecontext.h"
 #include <engine/shared/config.h>
 #include <game/server/teams.h>
+#include <game/server/gamecontext.h>
 #include <game/server/gamemodes/DDRace.h>
 #include <game/version.h>
 #if defined(CONF_SQL)
 #include <game/server/score/sql_score.h>
 #endif
+
+#include "save.h"
+
+#include <base/system.h>
 
 bool CheckClientID(int ClientID);
 
@@ -88,6 +93,46 @@ void CGameContext::ConKillPlayer(IConsole::IResult *pResult, void *pUserData)
 				pSelf->Server()->ClientName(pResult->m_ClientID));
 		pSelf->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
 	}
+}
+
+// Check whether a callback is appropriate, 
+// might be that the gamecontext isn't even ready for a load 
+// at this stage, in that case call the callback when ready
+static void MapReloadCallback(void *pContext)
+{
+	CGameContext *pSelf = (CGameContext *)pContext;
+	for(int i = 0; i < MAX_CLIENTS; i++)
+	{
+		CSaveTeam *pSavedTeam = pSelf->m_apSavedTeams[i];
+		// DISTRIBUTE TEES TO TEAMS BEFORE LOADING
+		pSavedTeam->load(i, true);
+	}
+}
+
+void CGameContext::ConSafeReload(IConsole::IResult *pResult, void *pUserData)
+{
+	CGameContext *pSelf = (CGameContext *)pUserData;
+	for(int i = 0; i < MAX_CLIENTS; i++)
+	{
+		pSelf->m_apSavedTeams[i] = new CSaveTeam(pSelf->m_pController);
+
+		int Result = pSelf->m_apSavedTeams[i]->save(i, true);
+		switch(Result){
+		case 0:
+			break;
+		case 2:
+			delete pSelf->m_apSavedTeams[i];
+			pSelf->m_apSavedTeams[i] = 0;
+			continue;
+			break;
+		case 3:
+			return; // All tees need to be ingame(?) Needs cleanup
+			break;
+		default:
+			return; // Unexpected return (with Force) Needs cleanup
+		}
+	}
+	pSelf->Server()->ReloadMap(MapReloadCallback, pSelf);
 }
 
 void CGameContext::ConNinja(IConsole::IResult *pResult, void *pUserData)

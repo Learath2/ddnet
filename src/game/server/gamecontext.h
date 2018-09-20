@@ -16,6 +16,7 @@
 #include "gameworld.h"
 #include "player.h"
 #include "teehistorian.h"
+#include "save.h"
 
 #include "score.h"
 #ifdef _MSC_VER
@@ -99,6 +100,7 @@ class CGameContext : public IGameServer
 	static void ConSay(IConsole::IResult *pResult, void *pUserData);
 	static void ConSetTeam(IConsole::IResult *pResult, void *pUserData);
 	static void ConSetTeamAll(IConsole::IResult *pResult, void *pUserData);
+	static void ConSafeReload(IConsole::IResult *pResult, void *pUserData);
 	//static void ConSwapTeams(IConsole::IResult *pResult, void *pUserData);
 	//static void ConShuffleTeams(IConsole::IResult *pResult, void *pUserData);
 	//static void ConLockTeams(IConsole::IResult *pResult, void *pUserData);
@@ -158,6 +160,8 @@ public:
 	int m_VoteEnforce;
 	char m_aaZoneEnterMsg[NUM_TUNEZONES][256]; // 0 is used for switching from or to area without tunings
 	char m_aaZoneLeaveMsg[NUM_TUNEZONES][256];
+
+	CSaveTeam *m_apSavedTeams[MAX_CLIENTS];
 
 	char m_aDeleteTempfile[128];
 	void DeleteTempfile();

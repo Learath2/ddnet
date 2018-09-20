@@ -174,6 +174,9 @@ public:
 	virtual void StopRecord(int ClientID) = 0;
 	virtual bool IsRecording(int ClientID) = 0;
 
+	// TODO: typedef the function pointer
+	virtual void ReloadMap(void (*pfnCallback)(void *), void *pContext) = 0;
+
 	virtual void GetClientAddr(int ClientID, NETADDR *pAddr) = 0;
 
 	virtual int* GetIdMap(int ClientID) = 0;

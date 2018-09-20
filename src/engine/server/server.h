@@ -199,7 +199,11 @@ public:
 	int64 m_GameStartTime;
 	//int m_CurrentGameTick;
 	int m_RunServer;
+
 	int m_MapReload;
+	void *m_pMapReloadContext;
+	void (*m_pfnMapReloadCallback)(void *pContext);
+
 	bool m_ReloadedWhenEmpty;
 	int m_RconClientID;
 	int m_RconAuthLevel;
@@ -298,6 +302,8 @@ public:
 	void StartRecord(int ClientID);
 	void StopRecord(int ClientID);
 	bool IsRecording(int ClientID);
+
+	void ReloadMap(void (*pfnCallback)(void *), void *pContext);
 
 	void InitRegister(CNetServer *pNetServer, IEngineMasterServer *pMasterServer, IConsole *pConsole);
 	int Run();

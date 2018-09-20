@@ -203,9 +203,9 @@ CSaveTeam::~CSaveTeam()
 		delete[] SavedTees;
 }
 
-int CSaveTeam::save(int Team)
+int CSaveTeam::save(int Team, bool Force)
 {
-	if(g_Config.m_SvTeam == 3 || (Team > 0 && Team < MAX_CLIENTS))
+	if(g_Config.m_SvTeam == 3 || (Team > 0 && Team < MAX_CLIENTS) || Force)
 	{
 		CGameTeams* Teams = &(((CGameControllerDDRace*)m_pController)->m_Teams);
 
@@ -217,7 +217,7 @@ int CSaveTeam::save(int Team)
 
 		m_TeamState = Teams->GetTeamState(Team);
 
-		if(m_TeamState != CGameTeams::TEAMSTATE_STARTED)
+		if(m_TeamState != CGameTeams::TEAMSTATE_STARTED && !Force)
 		{
 			return 4;
 		}
@@ -259,9 +259,9 @@ int CSaveTeam::save(int Team)
 		return 1;
 }
 
-int CSaveTeam::load(int Team)
+int CSaveTeam::load(int Team, bool Force)
 {
-	if(Team <= 0 || Team >= MAX_CLIENTS)
+	if(!Force && (Team <= 0 || Team >= MAX_CLIENTS))
 		return 1;
 
 	CGameTeams* pTeams = &(((CGameControllerDDRace*)m_pController)->m_Teams);

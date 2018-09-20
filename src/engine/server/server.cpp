@@ -1852,6 +1852,12 @@ int CServer::Run()
 					m_ServerInfoFirstRequest = 0;
 					Kernel()->ReregisterInterface(GameServer());
 					GameServer()->OnInit();
+					if(m_pfnMapReloadCallback)
+					{
+						m_pfnMapReloadCallback(m_pMapReloadContext);
+						m_pfnMapReloadCallback = 0;
+						m_pMapReloadContext = 0;
+					}
 					if(ErrorShutdown())
 					{
 						break;
@@ -2459,6 +2465,13 @@ void CServer::StopRecord(int ClientID)
 bool CServer::IsRecording(int ClientID)
 {
 	return m_aDemoRecorder[ClientID].IsRecording();
+}
+
+void CServer::ReloadMap(void (*pfnCallback)(void *), void *pContext)
+{
+	m_pfnMapReloadCallback = pfnCallback;
+	m_pMapReloadContext = pContext;
+	m_MapReload = 1;
 }
 
 void CServer::ConRecord(IConsole::IResult *pResult, void *pUser)

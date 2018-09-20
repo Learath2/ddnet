@@ -91,6 +91,9 @@ void CGameContext::Clear()
 	int NumVoteOptions = m_NumVoteOptions;
 	CTuningParams Tuning = m_Tuning;
 
+	CSaveTeam *apSavedTeams[MAX_CLIENTS];
+	mem_copy(apSavedTeams, m_apSavedTeams, sizeof(apSavedTeams));
+
 	m_Resetting = true;
 	this->~CGameContext();
 	mem_zero(this, sizeof(*this));
@@ -101,6 +104,8 @@ void CGameContext::Clear()
 	m_pVoteOptionLast = pVoteOptionLast;
 	m_NumVoteOptions = NumVoteOptions;
 	m_Tuning = Tuning;
+	
+	mem_copy(m_apSavedTeams, apSavedTeams, sizeof(m_apSavedTeams));
 }
 
 
@@ -2261,6 +2266,7 @@ void CGameContext::ConSetTeamAll(IConsole::IResult *pResult, void *pUserData)
 
 	// (void)pSelf->m_pController->CheckTeamBalance();
 }
+
 /*
 void CGameContext::ConSwapTeams(IConsole::IResult *pResult, void *pUserData)
 {

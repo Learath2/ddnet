@@ -88,8 +88,8 @@ public:
 	char* GetString();
 	int GetMembersCount() {return m_MembersCount;}
 	int LoadString(const char* String);
-	int save(int Team);
-	int load(int Team);
+	int save(int Team, bool Force = false);
+	int load(int Team, bool Force = false);
 	CSaveTee* SavedTees;
 
 private:
