@@ -10,6 +10,10 @@
 #define DDNET_INFO "ddnet-info.json"
 #define DDNET_INFO_TMP DDNET_INFO ".tmp"
 
+#define HTTP_MASTER_VERSION "v1"
+#define SERVERLIST "serverlist.json"
+#define SERVERLIST_TMP SERVERLIST ".tmp"
+
 /*
 	Structure: CServerInfo
 */

@@ -27,6 +27,7 @@ public:
 	virtual void SetCount(int Index, int Count) = 0;
 	virtual int GetCount(int Index) = 0;
 	virtual const char *GetName(int Index) = 0;
+	virtual void GetURL(int Index, char *pBuf, int BufSize) = 0;
 	virtual bool IsValid(int Index) = 0;
 };
 

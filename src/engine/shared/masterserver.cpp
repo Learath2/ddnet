@@ -9,6 +9,7 @@
 #include <engine/storage.h>
 
 #include "linereader.h"
+#include <curl/curl.h>
 
 class CMasterServer : public IEngineMasterServer
 {
@@ -21,6 +22,7 @@ public:
 		bool m_Valid;
 		int m_Count;
 		std::shared_ptr<CHostLookup> m_pLookup;
+		bool m_UseSSL;
 	};
 
 	enum
@@ -122,6 +124,12 @@ public:
 		return m_aMasterServers[Index].m_aHostname;
 	}
 
+	virtual void GetURL(int Index, char *pBuf, int BufSize)
+	{
+		str_format(pBuf, BufSize, "http%s://%s", m_aMasterServers[Index].m_UseSSL ? "s" : "",
+				   m_aMasterServers[Index].m_aHostname);
+	}
+
 	virtual bool IsValid(int Index)
 	{
 		return m_aMasterServers[Index].m_Valid;
@@ -138,7 +146,8 @@ public:
 		mem_zero(m_aMasterServers, sizeof(m_aMasterServers));
 		for(int i = 0; i < MAX_MASTERSERVERS; i++)
 		{
-			str_format(m_aMasterServers[i].m_aHostname, sizeof(m_aMasterServers[i].m_aHostname), "master%d.teeworlds.com", i+1);
+			str_format(m_aMasterServers[i].m_aHostname, sizeof(m_aMasterServers[i].m_aHostname), "master%d.ddnet.tw", i+1);
+			m_aMasterServers[i].m_UseSSL = true;
 			m_apLookup[i] = std::make_shared<CHostLookup>();
 		}
 	}
@@ -163,10 +172,10 @@ public:
 				break;
 
 			// parse line
-			char aAddrStr[NETADDR_MAXSTRSIZE];
-			if(sscanf(pLine, "%127s %47s", Info.m_aHostname, aAddrStr) == 2 && net_addr_from_str(&Info.m_Addr, aAddrStr) == 0)
+			int s = 0;
+			if(sscanf(pLine, "%127s %d", Info.m_aHostname, &s) == 2)
 			{
-				Info.m_Addr.port = 8300;
+				Info.m_UseSSL = s;
 				bool Added = false;
 				for(int i = 0; i < MAX_MASTERSERVERS; ++i)
 				{
@@ -212,13 +221,8 @@ public:
 
 		for(int i = 0; i < MAX_MASTERSERVERS; i++)
 		{
-			char aAddrStr[NETADDR_MAXSTRSIZE];
-			if(m_aMasterServers[i].m_Addr.type != NETTYPE_INVALID)
-				net_addr_str(&m_aMasterServers[i].m_Addr, aAddrStr, sizeof(aAddrStr), true);
-			else
-				aAddrStr[0] = 0;
 			char aBuf[256];
-			str_format(aBuf, sizeof(aBuf), "%s %s", m_aMasterServers[i].m_aHostname, aAddrStr);
+			str_format(aBuf, sizeof(aBuf), "%s %d", m_aMasterServers[i].m_aHostname, m_aMasterServers[i].m_UseSSL ? 1 : 0);
 			io_write(File, aBuf, str_length(aBuf));
 			io_write_newline(File);
 		}

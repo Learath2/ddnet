@@ -3,8 +3,11 @@
 #ifndef ENGINE_CLIENT_SERVERBROWSER_H
 #define ENGINE_CLIENT_SERVERBROWSER_H
 
+#include <memory>
+
 #include <engine/serverbrowser.h>
 #include <engine/shared/memheap.h>
+#include <engine/client/http.h>
 #include <engine/external/json-parser/json.h>
 
 class CServerBrowser : public IServerBrowser
@@ -113,6 +116,8 @@ public:
 	void CountryFilterClean(int Network);
 	void TypeFilterClean(int Network);
 
+	void ReadServerlist();
+
 	//
 	void Update(bool ForceResort);
 	void Set(const NETADDR &Addr, int Type, int Token, const CServerInfo *pInfo);
@@ -128,6 +133,8 @@ public:
 private:
 	CNetClient *m_pNetClient;
 	IMasterServer *m_pMasterServer;
+	class IEngine *m_pEngine;
+	class IStorage *m_pStorage;
 	class IConsole *m_pConsole;
 	class IFriends *m_pFriends;
 	char m_aNetVersion[128];
@@ -148,7 +155,6 @@ private:
 	CServerEntry *m_pFirstReqServer; // request list
 	CServerEntry *m_pLastReqServer;
 	int m_NumRequests;
-	int m_MasterServerCount;
 
 	//used instead of g_Config.br_max_requests to get more servers
 	int m_CurrentMaxRequests;
@@ -170,6 +176,10 @@ private:
 	int64 m_BroadcastTime;
 	int m_RequestNumber;
 	unsigned char m_aTokenSeed[16];
+
+	int m_MasterId;
+	std::shared_ptr<CGetFile> m_pServerlistTask;
+	json_value *m_pServerlist;
 
 	int GenerateToken(const NETADDR &Addr) const;
 	static int GetBasicToken(int Token);

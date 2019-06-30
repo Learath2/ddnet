@@ -11,6 +11,7 @@
 #include <engine/shared/network.h>
 #include <engine/shared/protocol.h>
 
+#include <engine/engine.h>
 #include <engine/config.h>
 #include <engine/console.h>
 #include <engine/friends.h>
@@ -63,6 +64,9 @@ CServerBrowser::CServerBrowser()
 	m_RequestNumber = 0;
 
 	m_pDDNetInfo = 0;
+
+	m_MasterId = 0;
+	m_pServerlistTask = nullptr;
 }
 
 CServerBrowser::~CServerBrowser()
@@ -76,6 +80,8 @@ void CServerBrowser::SetBaseInfo(class CNetClient *pClient, const char *pNetVers
 	m_pNetClient = pClient;
 	str_copy(m_aNetVersion, pNetVersion, sizeof(m_aNetVersion));
 	m_pMasterServer = Kernel()->RequestInterface<IMasterServer>();
+	m_pEngine = Kernel()->RequestInterface<IEngine>();
+	m_pStorage = Kernel()->RequestInterface<IStorage>();
 	m_pConsole = Kernel()->RequestInterface<IConsole>();
 	m_pFriends = Kernel()->RequestInterface<IFriends>();
 	IConfig *pConfig = Kernel()->RequestInterface<IConfig>();
@@ -536,7 +542,10 @@ void CServerBrowser::Set(const NETADDR &Addr, int Type, int Token, const CServer
 		if(!Find(Addr))
 		{
 			pEntry = Add(Addr);
-			QueueRequest(pEntry);
+			if(!pInfo)
+				QueueRequest(pEntry);
+			else
+				SetInfo(pEntry, *pInfo);
 		}
 	}
 	else if(Type == IServerBrowser::SET_FAV_ADD)
@@ -798,6 +807,79 @@ void CServerBrowser::RequestCurrentServer(const NETADDR &Addr) const
 	RequestImpl(Addr, 0);
 }
 
+void CServerBrowser::ReadServerlist()
+{
+	for(int i = 0; i < json_array_length(m_pServerlist); i++)
+	{
+		NETADDR Addr;
+		const json_value *v = json_array_get(m_pServerlist, i);
+		const json_value *ipo = json_object_get(v, "ip");
+		const json_value *po = json_object_get(v, "port");
+
+		net_addr_from_str(&Addr, json_string_get(ipo));
+		Addr.port = json_int_get(po);
+
+		CServerInfo Info;
+		const json_value *info = json_object_get(v, "info");
+		if(info)
+		{
+			#define STRSCPY(dst, src) \
+				t = json_object_get(info, src); \
+				str_copy(dst, json_string_get(t), sizeof(dst));
+
+			#define INTSET(dst, src) \
+				t = json_object_get(info, src); \
+				dst = json_int_get(t);
+
+			const json_value *t;
+			str_format(Info.m_aAddress, sizeof(Info.m_aAddress), "%s:%d", json_string_get(ipo),Addr.port);
+
+			STRSCPY(Info.m_aName, "name")
+			STRSCPY(Info.m_aGameType, "game_type")
+
+			t = json_object_get(info, "passworded");
+			Info.m_Flags = json_boolean_get(t) ? SERVER_FLAG_PASSWORD : 0;
+
+			STRSCPY(Info.m_aVersion, "version")
+			INTSET(Info.m_MaxPlayers, "max_players")
+			INTSET(Info.m_MaxClients, "max_clients")
+			#undef STRSCPY
+			#undef INTSET
+
+			const json_value *map = json_object_get(info, "map");
+
+			t = json_object_get(map, "name");
+			str_copy(Info.m_aMap, json_string_get(t), sizeof(Info.m_aMap));
+
+			t = json_object_get(map, "crc");
+			int crc = str_toint_base(json_string_get(t), 16);
+			Info.m_MapCrc = crc;
+
+			t = json_object_get(map, "size");
+			Info.m_MapSize = json_int_get(t);
+
+			const json_value *clients = json_object_get(info, "clients");
+			for(int j = 0; j < json_array_length(clients); j++)
+			{
+				const json_value *p = json_array_get(clients, j);
+				CServerInfo::CClient *slot = &Info.m_aClients[j];
+
+				t = json_object_get(p, "name");
+				str_copy(slot->m_aName, json_string_get(t), sizeof(slot->m_aName));
+
+				t = json_object_get(p, "clan");
+				str_copy(slot->m_aClan, json_string_get(t), sizeof(slot->m_aClan));
+
+				t = json_object_get(p, "score");
+				slot->m_Score = json_int_get(t);
+
+				slot->m_Player = true;
+			}
+		}
+
+		Set(Addr, IServerBrowser::SET_MASTER_ADD, -1, info ? &Info : 0);
+	}
+}
 
 void CServerBrowser::Update(bool ForceResort)
 {
@@ -809,107 +891,63 @@ void CServerBrowser::Update(bool ForceResort)
 	// do server list requests
 	if(m_NeedRefresh && !m_pMasterServer->IsRefreshing())
 	{
-		NETADDR Addr;
-		CNetChunk Packet;
-		int i = 0;
-
 		m_NeedRefresh = 0;
-		m_MasterServerCount = -1;
-		mem_zero(&Packet, sizeof(Packet));
-		Packet.m_ClientID = -1;
-		Packet.m_Flags = NETSENDFLAG_CONNLESS;
-		Packet.m_DataSize = sizeof(SERVERBROWSE_GETCOUNT);
-		Packet.m_pData = SERVERBROWSE_GETCOUNT;
+		m_MasterId = 0;
 
-		for(i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
+		// Find a valid master
+		while(!m_pMasterServer->IsValid(m_MasterId) && m_MasterId < IMasterServer::MAX_MASTERSERVERS)
+			m_MasterId++;
+
+		char aUrl[256];
+		m_pMasterServer->GetURL(m_MasterId, aUrl, sizeof(aUrl));
+		str_append(aUrl, "/" HTTP_MASTER_VERSION "/servers", sizeof(aUrl));
+		m_pServerlistTask = std::make_shared<CGetFile>(m_pStorage, aUrl, SERVERLIST_TMP, IStorage::TYPE_SAVE, true);
+		m_pEngine->AddJob(m_pServerlistTask);
+	}
+	else if(m_pServerlistTask)
+	{
+		if(m_pServerlistTask->State() == HTTP_DONE)
 		{
-			if(!m_pMasterServer->IsValid(i))
-				continue;
+			m_pServerlistTask = nullptr;
+			m_pStorage->RenameFile(SERVERLIST_TMP, SERVERLIST, IStorage::TYPE_SAVE);
+			IOHANDLE File = m_pStorage->OpenFile(SERVERLIST, IOFLAG_READ, IStorage::TYPE_SAVE);
 
-			Addr = m_pMasterServer->GetAddr(i);
-			m_pMasterServer->SetCount(i, -1);
-			Packet.m_Address = Addr;
-			m_pNetClient->Send(&Packet);
-			if(g_Config.m_Debug)
+			if(!File)
+				return;
+
+			const int Length = io_length(File);
+			if(Length <= 0)
 			{
-				dbg_msg("client_srvbrowse", "count-request sent to %d", i);
+				io_close(File);
+				return;
 			}
+
+			char *pBuf = (char *)malloc(Length);
+			pBuf[0] = '\0';
+
+			io_read(File, pBuf, Length);
+			io_close(File);
+
+			if(m_pServerlist)
+				json_value_free(m_pServerlist);
+
+			m_pServerlist = json_parse(pBuf, Length);
+			free(pBuf);
+
+			if(m_pServerlist && m_pServerlist->type != json_array)
+			{
+				json_value_free(m_pServerlist);
+				m_pServerlist = 0;
+			}
+
+			ReadServerlist();
+		}
+		else if(m_pServerlistTask->State() == HTTP_ERROR || m_pServerlistTask->State() == HTTP_ABORTED)
+		{
+			// Find new master, implement backoff + round-robin
 		}
 	}
 
-	//Check if all server counts arrived
-	if(m_MasterServerCount == -1)
-	{
-		m_MasterServerCount = 0;
-		for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
-			{
-				if(!m_pMasterServer->IsValid(i))
-					continue;
-				int Count = m_pMasterServer->GetCount(i);
-				if(Count == -1)
-				{
-				/* ignore Server
-					m_MasterServerCount = -1;
-					return;
-					// we don't have the required server information
-					*/
-				}
-				else
-					m_MasterServerCount += Count;
-			}
-		//request Server-List
-		NETADDR Addr;
-		CNetChunk Packet;
-		mem_zero(&Packet, sizeof(Packet));
-		Packet.m_ClientID = -1;
-		Packet.m_Flags = NETSENDFLAG_CONNLESS;
-		Packet.m_DataSize = sizeof(SERVERBROWSE_GETLIST);
-		Packet.m_pData = SERVERBROWSE_GETLIST;
-
-		for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
-		{
-			if(!m_pMasterServer->IsValid(i))
-				continue;
-
-			Addr = m_pMasterServer->GetAddr(i);
-			Packet.m_Address = Addr;
-			m_pNetClient->Send(&Packet);
-		}
-		if(g_Config.m_Debug)
-		{
-			dbg_msg("client_srvbrowse", "servercount: %d, requesting server list", m_MasterServerCount);
-		}
-		m_LastPacketTick = 0;
-	}
-	else if(m_MasterServerCount > -1)
-	{
-		m_MasterServerCount = 0;
-		for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
-			{
-				if(!m_pMasterServer->IsValid(i))
-					continue;
-				int Count = m_pMasterServer->GetCount(i);
-				if(Count == -1)
-				{
-				/* ignore Server
-					m_MasterServerCount = -1;
-					return;
-					// we don't have the required server information
-					*/
-				}
-				else
-					m_MasterServerCount += Count;
-			}
-			//if(g_Config.m_Debug)
-			//{
-			//	dbg_msg("client_srvbrowse", "ServerCount2: %d", m_MasterServerCount);
-			//}
-	}
-	if(m_MasterServerCount > m_NumRequests  + m_LastPacketTick)
-	{
-		++m_LastPacketTick;
-		return; //wait for more packets
-	}
 	pEntry = m_pFirstReqServer;
 	Count = 0;
 	while(1)
@@ -1180,8 +1218,7 @@ int CServerBrowser::HasRank(const char *pMap)
 
 void CServerBrowser::LoadDDNetInfoJson()
 {
-	IStorage *pStorage = Kernel()->RequestInterface<IStorage>();
-	IOHANDLE File = pStorage->OpenFile(DDNET_INFO, IOFLAG_READ, IStorage::TYPE_SAVE);
+	IOHANDLE File = m_pStorage->OpenFile(DDNET_INFO, IOFLAG_READ, IStorage::TYPE_SAVE);
 
 	if(!File)
 		return;
