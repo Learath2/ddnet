@@ -5,6 +5,8 @@
 
 #include "kernel.h"
 
+#define HTTP_MASTER_VERSION "v1"
+
 class IMasterServer : public IInterface
 {
 	MACRO_INTERFACE("masterserver", 0)

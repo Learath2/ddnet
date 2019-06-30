@@ -1,5 +1,5 @@
-#ifndef ENGINE_CLIENT_HTTP_H
-#define ENGINE_CLIENT_HTTP_H
+#ifndef ENGINE_SHARED_HTTP_H
+#define ENGINE_SHARED_HTTP_H
 
 #include <engine/shared/jobs.h>
 #include <engine/storage.h>
@@ -40,6 +40,8 @@ class CRequest : public IJob
 	std::atomic<int> m_State;
 	std::atomic<bool> m_Abort;
 
+	long m_ResponseCode;
+
 	static int ProgressCallback(void *pUser, double DlTotal, double DlCurr, double UlTotal, double UlCurr);
 	static size_t WriteCallback(char *pData, size_t Size, size_t Number, void *pUser);
 
@@ -53,6 +55,7 @@ public:
 	double Size() const { return m_Size; }
 	int Progress() const { return m_Progress; }
 	int State() const { return m_State; }
+	long ResponseCode() const { return m_ResponseCode; }
 	void Abort() { m_Abort = true; }
 };
 
@@ -106,4 +109,4 @@ public:
 
 bool HttpInit(IStorage *pStorage);
 void EscapeUrl(char *pBuf, int Size, const char *pStr);
-#endif // ENGINE_CLIENT_HTTP_H
+#endif // ENGINE_SHARED_HTTP_H

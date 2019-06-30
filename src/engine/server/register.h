@@ -3,6 +3,9 @@
 #ifndef ENGINE_SERVER_REGISTER_H
 #define ENGINE_SERVER_REGISTER_H
 
+#include <memory>
+
+#include <engine/shared/http.h>
 #include <engine/masterserver.h>
 
 class CRegister
@@ -10,22 +13,28 @@ class CRegister
 	enum
 	{
 		REGISTERSTATE_START=0,
-		REGISTERSTATE_UPDATE_ADDRS,
-		REGISTERSTATE_QUERY_COUNT,
+		REGISTERSTATE_GETSTATUS,
+		REGISTERSTATE_RUNNING,
 		REGISTERSTATE_HEARTBEAT,
 		REGISTERSTATE_REGISTERED,
-		REGISTERSTATE_ERROR
+		REGISTERSTATE_ERROR,
+
+		MASTERSTATE_START=0,
+		MASTERSTATE_LIVE,
+		MASTERSTATE_ERROR,
+		MASTERSTATE_INVALID,
 	};
 
 	struct CMasterserverInfo
 	{
 		NETADDR m_Addr;
-		int m_Count;
-		int m_Valid;
 		int64 m_LastSend;
+
+		int m_State;
+		std::shared_ptr<CGet> m_pTask;
 	};
 
-	class CNetServer *m_pNetServer;
+	class IEngine *m_pEngine;
 	class IEngineMasterServer *m_pMasterServer;
 	class IConsole *m_pConsole;
 
@@ -45,9 +54,8 @@ class CRegister
 
 public:
 	CRegister();
-	void Init(class CNetServer *pNetServer, class IEngineMasterServer *pMasterServer, class IConsole *pConsole);
+	void Init(class IEngine *pEngine, class IEngineMasterServer *pMasterServer, class IConsole *pConsole);
 	void RegisterUpdate(int Nettype);
-	int RegisterProcessPacket(struct CNetChunk *pPacket);
 };
 
 #endif

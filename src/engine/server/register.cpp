@@ -3,8 +3,12 @@
 #include <base/system.h>
 #include <engine/shared/network.h>
 #include <engine/shared/config.h>
+#include <engine/engine.h>
 #include <engine/console.h>
 #include <engine/masterserver.h>
+
+#include <engine/external/json-parser/json.h>
+#include <engine/external/json-builder/json-builder.h>
 
 #include <mastersrv/mastersrv.h>
 
@@ -12,7 +16,6 @@
 
 CRegister::CRegister()
 {
-	m_pNetServer = 0;
 	m_pMasterServer = 0;
 	m_pConsole = 0;
 
@@ -31,68 +34,9 @@ void CRegister::RegisterNewState(int State)
 	m_RegisterStateStart = time_get();
 }
 
-void CRegister::RegisterSendFwcheckresponse(NETADDR *pAddr)
+void CRegister::Init(IEngine *pEngine, IEngineMasterServer *pMasterServer, IConsole *pConsole)
 {
-	CNetChunk Packet;
-	Packet.m_ClientID = -1;
-	Packet.m_Address = *pAddr;
-	Packet.m_Flags = NETSENDFLAG_CONNLESS;
-	Packet.m_DataSize = sizeof(SERVERBROWSE_FWRESPONSE);
-	Packet.m_pData = SERVERBROWSE_FWRESPONSE;
-	m_pNetServer->Send(&Packet);
-}
-
-void CRegister::RegisterSendHeartbeat(NETADDR Addr)
-{
-	static unsigned char aData[sizeof(SERVERBROWSE_HEARTBEAT) + 2];
-	unsigned short Port = g_Config.m_SvPort;
-	CNetChunk Packet;
-
-	mem_copy(aData, SERVERBROWSE_HEARTBEAT, sizeof(SERVERBROWSE_HEARTBEAT));
-
-	Packet.m_ClientID = -1;
-	Packet.m_Address = Addr;
-	Packet.m_Flags = NETSENDFLAG_CONNLESS;
-	Packet.m_DataSize = sizeof(SERVERBROWSE_HEARTBEAT) + 2;
-	Packet.m_pData = &aData;
-
-	// supply the set port that the master can use if it has problems
-	if(g_Config.m_SvExternalPort)
-		Port = g_Config.m_SvExternalPort;
-	aData[sizeof(SERVERBROWSE_HEARTBEAT)] = Port >> 8;
-	aData[sizeof(SERVERBROWSE_HEARTBEAT)+1] = Port&0xff;
-	m_pNetServer->Send(&Packet);
-}
-
-void CRegister::RegisterSendCountRequest(NETADDR Addr)
-{
-	CNetChunk Packet;
-	Packet.m_ClientID = -1;
-	Packet.m_Address = Addr;
-	Packet.m_Flags = NETSENDFLAG_CONNLESS;
-	Packet.m_DataSize = sizeof(SERVERBROWSE_GETCOUNT);
-	Packet.m_pData = SERVERBROWSE_GETCOUNT;
-	m_pNetServer->Send(&Packet);
-}
-
-void CRegister::RegisterGotCount(CNetChunk *pChunk)
-{
-	unsigned char *pData = (unsigned char *)pChunk->m_pData;
-	int Count = (pData[sizeof(SERVERBROWSE_COUNT)]<<8) | pData[sizeof(SERVERBROWSE_COUNT)+1];
-
-	for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
-	{
-		if(net_addr_comp(&m_aMasterserverInfo[i].m_Addr, &pChunk->m_Address) == 0)
-		{
-			m_aMasterserverInfo[i].m_Count = Count;
-			break;
-		}
-	}
-}
-
-void CRegister::Init(CNetServer *pNetServer, IEngineMasterServer *pMasterServer, IConsole *pConsole)
-{
-	m_pNetServer = pNetServer;
+	m_pEngine = pEngine;
 	m_pMasterServer = pMasterServer;
 	m_pConsole = pConsole;
 }
@@ -111,121 +55,82 @@ void CRegister::RegisterUpdate(int Nettype)
 	{
 		m_RegisterCount = 0;
 		m_RegisterFirst = 1;
-		RegisterNewState(REGISTERSTATE_UPDATE_ADDRS);
+		RegisterNewState(REGISTERSTATE_GETSTATUS);
 		m_pMasterServer->RefreshAddresses(Nettype);
 		m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "refreshing ip addresses");
 	}
-	else if(m_RegisterState == REGISTERSTATE_UPDATE_ADDRS)
+	else if(m_RegisterState == REGISTERSTATE_GETSTATUS)
 	{
-		m_RegisterRegisteredServer = -1;
-
 		if(!m_pMasterServer->IsRefreshing())
 		{
-			int i;
-			for(i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
+			for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
 			{
+				CMasterserverInfo *pMaster = &m_aMasterserverInfo[i];
 				if(!m_pMasterServer->IsValid(i))
 				{
-					m_aMasterserverInfo[i].m_Valid = 0;
-					m_aMasterserverInfo[i].m_Count = 0;
+					pMaster->m_State = MASTERSTATE_INVALID;
 					continue;
 				}
 
 				NETADDR Addr = m_pMasterServer->GetAddr(i);
-				m_aMasterserverInfo[i].m_Addr = Addr;
-				m_aMasterserverInfo[i].m_Valid = 1;
-				m_aMasterserverInfo[i].m_Count = -1;
-				m_aMasterserverInfo[i].m_LastSend = 0;
+				pMaster->m_Addr = Addr;
+				pMaster->m_State = MASTERSTATE_START;
+				pMaster->m_LastSend = 0;
+
+				char aUrl[256];
+				m_pMasterServer->GetURL(i, aUrl, sizeof(aUrl));
+				str_append(aUrl, "/" HTTP_MASTER_VERSION "/status", sizeof(aUrl));
+
+				pMaster->m_pTask = std::make_shared<CGet>(aUrl, true);
+				m_pEngine->AddJob(pMaster->m_pTask);
 			}
 
-			m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "fetching server counts");
-			RegisterNewState(REGISTERSTATE_QUERY_COUNT);
+			m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "fetching server status");
+			RegisterNewState(REGISTERSTATE_RUNNING);
 		}
 	}
-	else if(m_RegisterState == REGISTERSTATE_QUERY_COUNT)
+	else if(m_RegisterState == REGISTERSTATE_RUNNING)
 	{
-		int Left = 0;
 		for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
 		{
-			if(!m_aMasterserverInfo[i].m_Valid)
-				continue;
-
-			if(m_aMasterserverInfo[i].m_Count == -1)
+			CMasterserverInfo *pMaster = &m_aMasterserverInfo[i];
+			switch(pMaster->m_State)
 			{
-				Left++;
-				if(m_aMasterserverInfo[i].m_LastSend+Freq < Now)
+			case MASTERSTATE_START:
+				if(pMaster->m_pTask)
 				{
-					m_aMasterserverInfo[i].m_LastSend = Now;
-					RegisterSendCountRequest(m_aMasterserverInfo[i].m_Addr);
+					switch(pMaster->m_pTask->State())
+					{
+					case HTTP_DONE:
+						const json_value *s = pMaster->m_pTask->ResultJson();
+						const char *Status = json_string_get(json_object_get(s, "status"));
+						if(!str_comp(Status, "ready"))
+						{
+							pMaster->m_pTask = nullptr;
+							pMaster->m_State = MASTERSTATE_LIVE;
+						}
+						else
+						{
+							pMaster->m_State = MASTERSTATE_ERROR;
+							dbg_msg("register", "server %d is %s, trying again in %d", i, Status, 15);
+						}
+						goto next;
+					case HTTP_ERROR:
+						pMaster->m_State = MASTERSTATE_ERROR;
+						dbg_msg("register", "server %d is dead, trying again in %d", i, 15);
+						goto next;
+					}
+				}
+				break;
+			case MASTERSTATE_LIVE:
+				if(!pMaster->m_pTask && Now > pMaster->m_LastSend + Freq * 15)
+				{
+
 				}
 			}
+			next:;
 		}
 
-		// check if we are done or timed out
-		if(Left == 0 || Now > m_RegisterStateStart+Freq*3)
-		{
-			// choose server
-			int Best = -1;
-			int i;
-			for(i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
-			{
-				if(!m_aMasterserverInfo[i].m_Valid || m_aMasterserverInfo[i].m_Count == -1)
-					continue;
-
-				if(Best == -1 || m_aMasterserverInfo[i].m_Count < m_aMasterserverInfo[Best].m_Count)
-					Best = i;
-			}
-
-			// server chosen
-			m_RegisterRegisteredServer = Best;
-			if(m_RegisterRegisteredServer == -1)
-			{
-				m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "WARNING: No master servers. Retrying in 60 seconds");
-				RegisterNewState(REGISTERSTATE_ERROR);
-			}
-			else
-			{
-				char aBuf[256];
-				str_format(aBuf, sizeof(aBuf), "chose '%s' as master, sending heartbeats", m_pMasterServer->GetName(m_RegisterRegisteredServer));
-				m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", aBuf);
-				m_aMasterserverInfo[m_RegisterRegisteredServer].m_LastSend = 0;
-				RegisterNewState(REGISTERSTATE_HEARTBEAT);
-			}
-		}
-	}
-	else if(m_RegisterState == REGISTERSTATE_HEARTBEAT)
-	{
-		// check if we should send heartbeat
-		if(Now > m_aMasterserverInfo[m_RegisterRegisteredServer].m_LastSend+Freq*15)
-		{
-			m_aMasterserverInfo[m_RegisterRegisteredServer].m_LastSend = Now;
-			RegisterSendHeartbeat(m_aMasterserverInfo[m_RegisterRegisteredServer].m_Addr);
-		}
-
-		if(Now > m_RegisterStateStart+Freq*60)
-		{
-			m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "WARNING: Master server is not responding, switching master");
-			RegisterNewState(REGISTERSTATE_START);
-		}
-	}
-	else if(m_RegisterState == REGISTERSTATE_REGISTERED)
-	{
-		if(m_RegisterFirst)
-			m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "server registered");
-
-		m_RegisterFirst = 0;
-
-		// check if we should send new heartbeat again
-		if(Now > m_RegisterStateStart+Freq)
-		{
-			if(m_RegisterCount == 120) // redo the whole process after 60 minutes to balance out the master servers
-				RegisterNewState(REGISTERSTATE_START);
-			else
-			{
-				m_RegisterCount++;
-				RegisterNewState(REGISTERSTATE_HEARTBEAT);
-			}
-		}
 	}
 	else if(m_RegisterState == REGISTERSTATE_ERROR)
 	{
@@ -233,53 +138,4 @@ void CRegister::RegisterUpdate(int Nettype)
 		if(Now > m_RegisterStateStart+Freq*60)
 			RegisterNewState(REGISTERSTATE_START);
 	}
-}
-
-int CRegister::RegisterProcessPacket(CNetChunk *pPacket)
-{
-	// check for masterserver address
-	bool Valid = false;
-	for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
-	{
-		if(net_addr_comp_noport(&pPacket->m_Address, &m_aMasterserverInfo[i].m_Addr) == 0)
-		{
-			Valid = true;
-			break;
-		}
-	}
-	if(!Valid)
-		return 0;
-
-	if(pPacket->m_DataSize == sizeof(SERVERBROWSE_FWCHECK) &&
-		mem_comp(pPacket->m_pData, SERVERBROWSE_FWCHECK, sizeof(SERVERBROWSE_FWCHECK)) == 0)
-	{
-		RegisterSendFwcheckresponse(&pPacket->m_Address);
-		return 1;
-	}
-	else if(pPacket->m_DataSize == sizeof(SERVERBROWSE_FWOK) &&
-		mem_comp(pPacket->m_pData, SERVERBROWSE_FWOK, sizeof(SERVERBROWSE_FWOK)) == 0)
-	{
-		if(m_RegisterFirst)
-			m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "no firewall/nat problems detected");
-		RegisterNewState(REGISTERSTATE_REGISTERED);
-		return 1;
-	}
-	else if(pPacket->m_DataSize == sizeof(SERVERBROWSE_FWERROR) &&
-		mem_comp(pPacket->m_pData, SERVERBROWSE_FWERROR, sizeof(SERVERBROWSE_FWERROR)) == 0)
-	{
-		m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", "ERROR: the master server reports that clients can not connect to this server.");
-		char aBuf[256];
-		str_format(aBuf, sizeof(aBuf), "ERROR: configure your firewall/nat to let through udp on port %d.", g_Config.m_SvPort);
-		m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "register", aBuf);
-		//RegisterNewState(REGISTERSTATE_ERROR);
-		return 1;
-	}
-	else if(pPacket->m_DataSize == sizeof(SERVERBROWSE_COUNT)+2 &&
-		mem_comp(pPacket->m_pData, SERVERBROWSE_COUNT, sizeof(SERVERBROWSE_COUNT)) == 0)
-	{
-		RegisterGotCount(pPacket);
-		return 1;
-	}
-
-	return 0;
 }

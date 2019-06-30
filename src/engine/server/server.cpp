@@ -1730,33 +1730,29 @@ void CServer::PumpNetwork()
 	{
 		if(Packet.m_ClientID == -1)
 		{
-			// stateless
-			if(!m_Register.RegisterProcessPacket(&Packet))
+			int ExtraToken = 0;
+			int Type = -1;
+			if(Packet.m_DataSize >= (int)sizeof(SERVERBROWSE_GETINFO)+1 &&
+				mem_comp(Packet.m_pData, SERVERBROWSE_GETINFO, sizeof(SERVERBROWSE_GETINFO)) == 0)
 			{
-				int ExtraToken = 0;
-				int Type = -1;
-				if(Packet.m_DataSize >= (int)sizeof(SERVERBROWSE_GETINFO)+1 &&
-					mem_comp(Packet.m_pData, SERVERBROWSE_GETINFO, sizeof(SERVERBROWSE_GETINFO)) == 0)
+				if(Packet.m_Flags&NETSENDFLAG_EXTENDED)
 				{
-					if(Packet.m_Flags&NETSENDFLAG_EXTENDED)
-					{
-						Type = SERVERINFO_EXTENDED;
-						ExtraToken = (Packet.m_aExtraData[0] << 8) | Packet.m_aExtraData[1];
-					}
-					else
-						Type = SERVERINFO_VANILLA;
+					Type = SERVERINFO_EXTENDED;
+					ExtraToken = (Packet.m_aExtraData[0] << 8) | Packet.m_aExtraData[1];
 				}
-				else if(Packet.m_DataSize >= (int)sizeof(SERVERBROWSE_GETINFO_64_LEGACY)+1 &&
-					mem_comp(Packet.m_pData, SERVERBROWSE_GETINFO_64_LEGACY, sizeof(SERVERBROWSE_GETINFO_64_LEGACY)) == 0)
-				{
-					Type = SERVERINFO_64_LEGACY;
-				}
-				if(Type != -1)
-				{
-					int Token = ((unsigned char *)Packet.m_pData)[sizeof(SERVERBROWSE_GETINFO)];
-					Token |= ExtraToken << 8;
-					SendServerInfoConnless(&Packet.m_Address, Token, Type);
-				}
+				else
+					Type = SERVERINFO_VANILLA;
+			}
+			else if(Packet.m_DataSize >= (int)sizeof(SERVERBROWSE_GETINFO_64_LEGACY)+1 &&
+				mem_comp(Packet.m_pData, SERVERBROWSE_GETINFO_64_LEGACY, sizeof(SERVERBROWSE_GETINFO_64_LEGACY)) == 0)
+			{
+				Type = SERVERINFO_64_LEGACY;
+			}
+			if(Type != -1)
+			{
+				int Token = ((unsigned char *)Packet.m_pData)[sizeof(SERVERBROWSE_GETINFO)];
+				Token |= ExtraToken << 8;
+				SendServerInfoConnless(&Packet.m_Address, Token, Type);
 			}
 		}
 		else
@@ -1839,9 +1835,9 @@ int CServer::LoadMap(const char *pMapName)
 	return 1;
 }
 
-void CServer::InitRegister(CNetServer *pNetServer, IEngineMasterServer *pMasterServer, IConsole *pConsole)
+void CServer::InitRegister(IEngine *pEngine, IEngineMasterServer *pMasterServer, IConsole *pConsole)
 {
-	m_Register.Init(pNetServer, pMasterServer, pConsole);
+	m_Register.Init(pEngine, pMasterServer, pConsole);
 }
 
 int CServer::Run()
@@ -2982,7 +2978,7 @@ int main(int argc, const char **argv) // ignore_convention
 	IStorage *pStorage = CreateStorage("Teeworlds", IStorage::STORAGETYPE_SERVER, argc, argv); // ignore_convention
 	IConfig *pConfig = CreateConfig();
 
-	pServer->InitRegister(&pServer->m_NetServer, pEngineMasterServer, pConsole);
+	pServer->InitRegister(pEngine, pEngineMasterServer, pConsole);
 
 	{
 		bool RegisterFail = false;

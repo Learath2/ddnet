@@ -76,7 +76,8 @@ CRequest::CRequest(const char *pUrl, bool CanTimeout) :
 	m_Size(0),
 	m_Progress(0),
 	m_State(HTTP_QUEUED),
-	m_Abort(false)
+	m_Abort(false),
+	m_ResponseCode(-1)
 {
 	str_copy(m_aUrl, pUrl, sizeof(m_aUrl));
 }
@@ -170,6 +171,7 @@ int CRequest::RunImpl(CURL *pHandle)
 	else
 	{
 		dbg_msg("http", "task done %s", m_aUrl);
+		curl_easy_getinfo(pHandle, CURLINFO_RESPONSE_CODE, &m_ResponseCode);
 		return HTTP_DONE;
 	}
 }
