@@ -75,6 +75,7 @@ class CClient : public IClient, public CDemoPlayer::IListener
 	IStorage *m_pStorage;
 	IUpdater *m_pUpdater;
 	IEngineMasterServer *m_pMasterServer;
+	IHMasterServer *m_pHMasterServer;
 
 	enum
 	{
@@ -235,6 +236,7 @@ public:
 	IEngineSound *Sound() { return m_pSound; }
 	IGameClient *GameClient() { return m_pGameClient; }
 	IEngineMasterServer *MasterServer() { return m_pMasterServer; }
+	IHMasterServer *HMasterServer() { return m_pHMasterServer; }
 	IStorage *Storage() { return m_pStorage; }
 	IUpdater *Updater() { return m_pUpdater; }
 
