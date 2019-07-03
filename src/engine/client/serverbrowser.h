@@ -128,6 +128,7 @@ public:
 private:
 	CNetClient *m_pNetClient;
 	IMasterServer *m_pMasterServer;
+	IHMasterServer *m_pHMasterServer;
 	class IConsole *m_pConsole;
 	class IFriends *m_pFriends;
 	char m_aNetVersion[128];

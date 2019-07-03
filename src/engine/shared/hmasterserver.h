@@ -8,6 +8,9 @@
 
 #define HTTP_MASTER_VERSION "v1"
 
+#define SERVERLIST "serverlist.json"
+#define SERVERLIST_TMP SERVERLIST ".tmp"
+
 class CHMasterServer : public IHMasterServer
 {
     struct CMasterInfo
@@ -28,11 +31,16 @@ class CHMasterServer : public IHMasterServer
         int64 m_LastTry;
 
         std::shared_ptr<CGet> m_pStatusTask;
+        std::shared_ptr<CGetFile> m_pListTask;
 
         CMasterInfo() : m_aUrl(""), m_State(STATE_STALE), m_Tries(0), m_LastTry(0), m_pStatusTask(nullptr) {}
     };
     CMasterInfo m_aMasterServers[IHMasterServer::MAX_MASTERSERVERS];
     int m_Count;
+
+    CMasterInfo *m_pLastMaster;
+    FServerListCallback m_pfnAddServer;
+    void *m_pCbUser;
 
     class IEngine *m_pEngine;
     class IStorage *m_pStorage;
@@ -43,6 +51,9 @@ public:
     void Init(class IEngine *pEngine, class IStorage *pStorage);
     void Refresh(bool Force);
     void Update();
+
+    void GetServerList(FServerListCallback pfnCallback, void *pUser);
+    int ReadServerList(FServerListCallback pfnCallback);
 
     int LoadDefaults();
 

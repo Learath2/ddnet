@@ -2713,7 +2713,7 @@ void CClient::Update()
 
 	// update the maser server registry
 	MasterServer()->Update();
-	HMasterServer()->Update();
+	//HMasterServer()->Update();
 
 	// update the server browser
 	m_ServerBrowser.Update(m_ResortServerBrowser);

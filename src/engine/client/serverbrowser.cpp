@@ -14,6 +14,7 @@
 #include <engine/config.h>
 #include <engine/console.h>
 #include <engine/friends.h>
+#include <engine/hmasterserver.h>
 #include <engine/masterserver.h>
 #include <engine/storage.h>
 
@@ -35,6 +36,7 @@ public:
 CServerBrowser::CServerBrowser()
 {
 	m_pMasterServer = 0;
+	m_pHMasterServer = 0;
 	m_ppServerlist = 0;
 	m_pSortedServerlist = 0;
 
@@ -76,6 +78,7 @@ void CServerBrowser::SetBaseInfo(class CNetClient *pClient, const char *pNetVers
 	m_pNetClient = pClient;
 	str_copy(m_aNetVersion, pNetVersion, sizeof(m_aNetVersion));
 	m_pMasterServer = Kernel()->RequestInterface<IMasterServer>();
+	m_pHMasterServer = Kernel()->RequestInterface<IHMasterServer>();
 	m_pConsole = Kernel()->RequestInterface<IConsole>();
 	m_pFriends = Kernel()->RequestInterface<IFriends>();
 	IConfig *pConfig = Kernel()->RequestInterface<IConfig>();
@@ -536,7 +539,10 @@ void CServerBrowser::Set(const NETADDR &Addr, int Type, int Token, const CServer
 		if(!Find(Addr))
 		{
 			pEntry = Add(Addr);
-			QueueRequest(pEntry);
+			if(!pInfo)
+				QueueRequest(pEntry);
+			else
+				SetInfo(pEntry, *pInfo);
 		}
 	}
 	else if(Type == IServerBrowser::SET_FAV_ADD)
@@ -798,6 +804,11 @@ void CServerBrowser::RequestCurrentServer(const NETADDR &Addr) const
 	RequestImpl(Addr, 0);
 }
 
+static void AddServerCallback(NETADDR Addr, const CServerInfo *pInfo, void *pUser)
+{
+	CServerBrowser *pSelf = (CServerBrowser *)pUser;
+	pSelf->Set(Addr, IServerBrowser::SET_MASTER_ADD, -1, pInfo);
+}
 
 void CServerBrowser::Update(bool ForceResort)
 {
@@ -811,7 +822,6 @@ void CServerBrowser::Update(bool ForceResort)
 	{
 		NETADDR Addr;
 		CNetChunk Packet;
-		int i = 0;
 
 		m_NeedRefresh = 0;
 		m_MasterServerCount = -1;
@@ -821,7 +831,7 @@ void CServerBrowser::Update(bool ForceResort)
 		Packet.m_DataSize = sizeof(SERVERBROWSE_GETCOUNT);
 		Packet.m_pData = SERVERBROWSE_GETCOUNT;
 
-		for(i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
+		for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
 		{
 			if(!m_pMasterServer->IsValid(i))
 				continue;
@@ -835,6 +845,8 @@ void CServerBrowser::Update(bool ForceResort)
 				dbg_msg("client_srvbrowse", "count-request sent to %d", i);
 			}
 		}
+
+		m_pHMasterServer->GetServerList(AddServerCallback, this);
 	}
 
 	//Check if all server counts arrived
@@ -842,21 +854,22 @@ void CServerBrowser::Update(bool ForceResort)
 	{
 		m_MasterServerCount = 0;
 		for(int i = 0; i < IMasterServer::MAX_MASTERSERVERS; i++)
+		{
+			if(!m_pMasterServer->IsValid(i))
+				continue;
+			int Count = m_pMasterServer->GetCount(i);
+			if(Count == -1)
 			{
-				if(!m_pMasterServer->IsValid(i))
-					continue;
-				int Count = m_pMasterServer->GetCount(i);
-				if(Count == -1)
-				{
-				/* ignore Server
-					m_MasterServerCount = -1;
-					return;
-					// we don't have the required server information
-					*/
-				}
-				else
-					m_MasterServerCount += Count;
+			/* ignore Server
+				m_MasterServerCount = -1;
+				return;
+				// we don't have the required server information
+				*/
 			}
+			else
+				m_MasterServerCount += Count;
+		}
+
 		//request Server-List
 		NETADDR Addr;
 		CNetChunk Packet;

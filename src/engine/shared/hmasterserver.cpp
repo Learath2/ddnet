@@ -15,6 +15,9 @@ CHMasterServer::CHMasterServer()
     m_Count = 0;
     m_pStorage = 0;
     m_pEngine = 0;
+    m_pLastMaster = nullptr;
+    m_pfnAddServer = nullptr;
+    m_pCbUser = nullptr;
 }
 
 void CHMasterServer::Init(IEngine *pEngine, IStorage *pStorage)
@@ -132,6 +135,93 @@ void CHMasterServer::Update()
             }
             break;
         }
+    }
+
+    if(m_pLastMaster && m_pLastMaster->m_pListTask && m_pLastMaster->m_pListTask->State() == HTTP_DONE)
+    {
+        // TODO: Verify json here
+        m_pStorage->RenameFile(SERVERLIST_TMP, SERVERLIST, IStorage::TYPE_SAVE);
+        m_pLastMaster->m_pListTask = nullptr;
+
+        ReadServerList(m_pfnAddServer);
+    }
+}
+
+void CHMasterServer::GetServerList(FServerListCallback pfnCallback, void *pUser)
+{
+    if(!m_pStorage)
+        return;
+
+    if(!m_pLastMaster || m_pLastMaster->m_pListTask)
+        return;
+
+    if(m_pLastMaster->m_State != CMasterInfo::STATE_LIVE)
+    {
+        for(int i = 0; i < MAX_MASTERSERVERS; i++)
+        {
+            if(m_aMasterServers[i].m_State == CMasterInfo::STATE_LIVE)
+            {
+                m_pLastMaster = &m_aMasterServers[i];
+                break;
+            }
+        }
+    }
+
+    dbg_msg("hmasterserver", "chose %s", m_pLastMaster->m_aUrl);
+    char aUrl[256];
+    str_format(aUrl, sizeof(aUrl), "%s/" HTTP_MASTER_VERSION "/servers", m_pLastMaster->m_aUrl);
+    m_pLastMaster->m_pListTask = std::make_shared<CGetFile>(m_pStorage, aUrl, SERVERLIST_TMP, IStorage::TYPE_SAVE, true);
+    m_pEngine->AddJob(m_pLastMaster->m_pListTask);
+
+    m_pfnAddServer = pfnCallback;
+    m_pCbUser = pUser;
+}
+
+int CHMasterServer::ReadServerList(FServerListCallback pfnCallback)
+{
+    IOHANDLE File = m_pStorage->OpenFile(SERVERLIST, IOFLAG_READ, IStorage::TYPE_SAVE);
+    if(!File)
+        return -1;
+
+    int Length = io_length(File);
+    if(Length <= 0)
+    {
+        io_close(File);
+        return -1;
+    }
+
+    char *pBuf = (char *)malloc(Length);
+    if(!pBuf)
+    {
+        io_close(File);
+        return -1;
+    }
+
+    io_read(File, pBuf, Length);
+    io_close(File);
+
+    json_value *pList = json_parse(pBuf, Length);
+    if(!pList || pList->type != json_array)
+    {
+        return pList ? 1 : -1;
+    }
+
+    for(int i = 0; i < json_array_length(pList); i++)
+    {
+        json_value pServer = *json_array_get(pList, i);
+        NETADDR Addr;
+
+        if(!pServer["ip"] || pServer["ip"].type == json_string)
+            continue;
+        net_addr_from_str(&Addr, pServer["ip"]);
+
+        if(!pServer["port"] || pServer["port"].type == json_integer)
+            continue;
+        Addr.port = (json_int_t)pServer["port"];
+
+
+        CServerInfo Info = {{0}};
+
     }
 }
 
