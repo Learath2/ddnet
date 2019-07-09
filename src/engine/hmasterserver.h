@@ -21,7 +21,7 @@ public:
 	virtual void Update() = 0;
 
 	virtual void GetServerList(FServerListCallback pfnCallback, void *pUser) = 0;
-	virtual int ReadServerList(FServerListCallback pfnCallback) = 0;
+	virtual int ReadServerList(FServerListCallback pfnCallback, void *pUser) = 0;
 
 	virtual int Load() = 0;
 	virtual int Save() = 0;

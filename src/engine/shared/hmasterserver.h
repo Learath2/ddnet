@@ -34,6 +34,11 @@ class CHMasterServer : public IHMasterServer
         std::shared_ptr<CGetFile> m_pListTask;
 
         CMasterInfo() : m_aUrl(""), m_State(STATE_STALE), m_Tries(0), m_LastTry(0), m_pStatusTask(nullptr) {}
+
+        void GetEndpoint(char *pBuf, int BufSize, const char *pEndpoint)
+        {
+            str_format(pBuf, BufSize, "%s/" HTTP_MASTER_VERSION "/%s", m_aUrl, pEndpoint);
+        }
     };
     CMasterInfo m_aMasterServers[IHMasterServer::MAX_MASTERSERVERS];
     int m_Count;
@@ -53,7 +58,8 @@ public:
     void Update();
 
     void GetServerList(FServerListCallback pfnCallback, void *pUser);
-    int ReadServerList(FServerListCallback pfnCallback);
+    int ParseInfo(json_value pData, CServerInfo &Info);
+    int ReadServerList(FServerListCallback pfnCallback, void *pUser);
 
     int LoadDefaults();
 

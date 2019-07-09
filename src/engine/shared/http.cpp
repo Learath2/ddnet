@@ -71,8 +71,9 @@ void EscapeUrl(char *pBuf, int Size, const char *pStr)
 	curl_free(pEsc);
 }
 
-CRequest::CRequest(const char *pUrl, bool CanTimeout) :
+CRequest::CRequest(const char *pUrl, bool CanTimeout, bool Silent) :
 	m_CanTimeout(CanTimeout),
+	m_Silent(Silent),
 	m_Size(0),
 	m_Progress(0),
 	m_State(HTTP_QUEUED),
@@ -155,7 +156,9 @@ int CRequest::RunImpl(CURL *pHandle)
 		return HTTP_ERROR;
 	}
 
-	dbg_msg("http", "http %s", m_aUrl);
+	if(!m_Silent)
+		dbg_msg("http", "http %s", m_aUrl);
+
 	m_State = HTTP_RUNNING;
 	int Ret = curl_easy_perform(pHandle);
 	if(!BeforeCompletion())
@@ -164,12 +167,14 @@ int CRequest::RunImpl(CURL *pHandle)
 	}
 	if(Ret != CURLE_OK)
 	{
-		dbg_msg("http", "task failed. libcurl error: %s", aErr);
+		if(!m_Silent)
+			dbg_msg("http", "task failed. libcurl error: %s", aErr);
 		return (Ret == CURLE_ABORTED_BY_CALLBACK) ? HTTP_ABORTED : HTTP_ERROR;
 	}
 	else
 	{
-		dbg_msg("http", "task done %s", m_aUrl);
+		if(!m_Silent)
+			dbg_msg("http", "task done %s", m_aUrl);
 		return HTTP_DONE;
 	}
 }
@@ -189,8 +194,8 @@ int CRequest::ProgressCallback(void *pUser, double DlTotal, double DlCurr, doubl
 	return pTask->m_Abort ? -1 : 0;
 }
 
-CGet::CGet(const char *pUrl, bool CanTimeout) :
-	CRequest(pUrl, CanTimeout),
+CGet::CGet(const char *pUrl, bool CanTimeout, bool Silent) :
+	CRequest(pUrl, CanTimeout, Silent),
 	m_BufferSize(0),
 	m_BufferLength(0),
 	m_pBuffer(NULL)
@@ -262,8 +267,8 @@ size_t CGet::OnData(char *pData, size_t DataSize)
 	return DataSize;
 }
 
-CGetFile::CGetFile(IStorage *pStorage, const char *pUrl, const char *pDest, int StorageType, bool CanTimeout) :
-	CRequest(pUrl, CanTimeout),
+CGetFile::CGetFile(IStorage *pStorage, const char *pUrl, const char *pDest, int StorageType, bool CanTimeout, bool Silent) :
+	CRequest(pUrl, CanTimeout, Silent),
 	m_pStorage(pStorage),
 	m_StorageType(StorageType)
 {

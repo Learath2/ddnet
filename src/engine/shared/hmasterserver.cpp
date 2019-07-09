@@ -31,7 +31,7 @@ int CHMasterServer::LoadDefaults()
     for(m_Count = 0; m_Count < MAX_MASTERSERVERS; m_Count++)
     {
         CMasterInfo Info;
-        str_format(Info.m_aUrl, sizeof(Info.m_aUrl), "https://master%d.ddnet.tw/" HTTP_MASTER_VERSION, m_Count);
+        str_format(Info.m_aUrl, sizeof(Info.m_aUrl), "https://master%d.ddnet.tw", m_Count);
         m_aMasterServers[m_Count] = Info;
     }
 
@@ -54,7 +54,7 @@ int CHMasterServer::Load()
     for(m_Count = 0; m_Count < MAX_MASTERSERVERS && (pLine = Reader.Get()); m_Count++)
     {
         CMasterInfo Info;
-        str_format(Info.m_aUrl, sizeof(Info.m_aUrl), "%s/" HTTP_MASTER_VERSION, pLine);
+        str_copy(Info.m_aUrl, pLine, sizeof(Info.m_aUrl));
         m_aMasterServers[m_Count] = Info;
     }
 
@@ -103,8 +103,8 @@ void CHMasterServer::Update()
         {
         case CMasterInfo::STATE_STALE:
             char aUrl[256];
-            str_format(aUrl, sizeof(aUrl), "%s/status", pMaster->m_aUrl);
-            pMaster->m_pStatusTask = std::make_shared<CGet>(aUrl, true);
+            pMaster->GetEndpoint(aUrl, sizeof(aUrl), "status");
+            pMaster->m_pStatusTask = std::make_shared<CGet>(aUrl, true, true);
             m_pEngine->AddJob(pMaster->m_pStatusTask);
 
             pMaster->m_LastTry = time_get();
@@ -117,18 +117,24 @@ void CHMasterServer::Update()
             dbg_assert((bool)pMaster->m_pStatusTask, "missing status task");
             if(pMaster->m_pStatusTask->State() == HTTP_DONE)
             {
-                const json_value pStatus = *pMaster->m_pStatusTask->ResultJson();
-                pMaster->m_State = pStatus["status"] && !str_comp(pStatus["status"], "ready") ?
+                const json_value Status = *pMaster->m_pStatusTask->ResultJson();
+                pMaster->m_State = Status.type == json_object && Status["status"].type == json_string && !str_comp(Status["status"], "ready") ?
                                         CMasterInfo::STATE_LIVE : CMasterInfo::STATE_ERROR;
                 pMaster->m_pStatusTask = nullptr;
             }
-            else if(pMaster->m_pStatusTask->State() != HTTP_RUNNING)
+            else if(pMaster->m_pStatusTask->State() != HTTP_RUNNING && pMaster->m_pStatusTask->State() != HTTP_QUEUED){
                 dbg_msg("hmasterserver", "masterserver %d failed to respond or isn't ready", i);
+                pMaster->m_pStatusTask = nullptr;
+                pMaster->m_State = CMasterInfo::STATE_ERROR;
+            }
             break;
 
         case CMasterInfo::STATE_ERROR:
-            if(pMaster->m_Tries > 5)
+            if(pMaster->m_Tries > 2)
+            {
+                dbg_msg("hmasterserver", "invalidating masterserver %d", i);
                 pMaster->m_State = CMasterInfo::STATE_INVALID;
+            }
             else if(time_get() > pMaster->m_LastTry + time_freq() * 15)
             {
                 pMaster->m_State = CMasterInfo::STATE_STALE;
@@ -143,7 +149,7 @@ void CHMasterServer::Update()
         m_pStorage->RenameFile(SERVERLIST_TMP, SERVERLIST, IStorage::TYPE_SAVE);
         m_pLastMaster->m_pListTask = nullptr;
 
-        ReadServerList(m_pfnAddServer);
+        ReadServerList(m_pfnAddServer, m_pCbUser);
     }
 }
 
@@ -169,7 +175,7 @@ void CHMasterServer::GetServerList(FServerListCallback pfnCallback, void *pUser)
 
     dbg_msg("hmasterserver", "chose %s", m_pLastMaster->m_aUrl);
     char aUrl[256];
-    str_format(aUrl, sizeof(aUrl), "%s/" HTTP_MASTER_VERSION "/servers", m_pLastMaster->m_aUrl);
+    m_pLastMaster->GetEndpoint(aUrl, sizeof(aUrl), "servers");
     m_pLastMaster->m_pListTask = std::make_shared<CGetFile>(m_pStorage, aUrl, SERVERLIST_TMP, IStorage::TYPE_SAVE, true);
     m_pEngine->AddJob(m_pLastMaster->m_pListTask);
 
@@ -177,7 +183,101 @@ void CHMasterServer::GetServerList(FServerListCallback pfnCallback, void *pUser)
     m_pCbUser = pUser;
 }
 
-int CHMasterServer::ReadServerList(FServerListCallback pfnCallback)
+int CHMasterServer::ParseInfo(json_value Data, CServerInfo &Info)
+{
+    // Parse info
+    if(Data["name"].type != json_string)
+        return 1;
+
+    str_copy(Info.m_aName, Data["name"], sizeof(Info.m_aName));
+
+    if(Data["game_type"].type != json_string)
+        return 1;
+
+    str_copy(Info.m_aGameType, Data["game_type"], sizeof(Info.m_aGameType));
+
+    if(Data["version"].type != json_string)
+        return 1;
+
+    str_copy(Info.m_aVersion, Data["version"], sizeof(Info.m_aVersion));
+
+    if(Data["passworded"].type != json_boolean)
+        return 1;
+
+    Info.m_Flags = Data["passworded"] ? SERVER_FLAG_PASSWORD : 0;
+
+    if(Data["max_players"].type != json_integer)
+        return 1;
+
+    Info.m_MaxPlayers = Data["max_players"];
+
+    if(Data["max_clients"].type != json_integer)
+        return 1;
+
+    Info.m_MaxClients = Data["max_clients"];
+
+    // Parse map
+    json_value Map = Data["map"];
+    if(Map.type != json_object)
+        return 1;
+
+    if(Map["name"].type != json_string)
+        return 1;
+
+    str_copy(Info.m_aMap, Map["name"], sizeof(Info.m_aMap));
+
+    if(Map["size"].type != json_integer)
+        return 1;
+
+    Info.m_MapSize = Map["size"];
+
+    if(Map["crc32"].type != json_string || !str_isallhex(Map["crc32"]))
+        return 1;
+
+    Info.m_MapCrc = str_toint_base(Map["crc32"], 16);
+
+    if(Map["sha256"].type != json_string || sha256_from_str(&Info.m_MapSha, Map["sha256"]))
+    {
+        ; // Leave sha256 optional for now
+    }
+
+    // Parse clients
+    if(Data["clients"].type != json_array)
+        return 1;
+
+    for(int i = 0; i < json_array_length(&Data["clients"]) && i < MAX_CLIENTS; i++)
+    {
+        json_value c = Data["clients"][i];
+        if(c.type != json_object)
+            return 1;
+
+        CServerInfo::CClient *pClient = &Info.m_aClients[i];
+
+        if(c["name"].type != json_string)
+            return 1;
+
+        str_copy(pClient->m_aName, c["name"], sizeof(pClient->m_aName));
+
+        if(c["clan"].type != json_string)
+            return 1;
+
+        str_copy(pClient->m_aClan, c["clan"], sizeof(pClient->m_aClan));
+
+        if(c["country"].type != json_integer)
+            return 1;
+
+        pClient->m_Country = c["country"];
+
+        if(c["score"].type != json_integer)
+            return 1;
+
+        pClient->m_Score = c["score"];
+    }
+
+    return 0;
+}
+
+int CHMasterServer::ReadServerList(FServerListCallback pfnCallback, void *pUser)
 {
     IOHANDLE File = m_pStorage->OpenFile(SERVERLIST, IOFLAG_READ, IStorage::TYPE_SAVE);
     if(!File)
@@ -206,23 +306,33 @@ int CHMasterServer::ReadServerList(FServerListCallback pfnCallback)
         return pList ? 1 : -1;
     }
 
+    int Count = 0;
     for(int i = 0; i < json_array_length(pList); i++)
     {
         json_value pServer = *json_array_get(pList, i);
         NETADDR Addr;
 
-        if(!pServer["ip"] || pServer["ip"].type == json_string)
+        if(pServer["ip"].type != json_string)
             continue;
         net_addr_from_str(&Addr, pServer["ip"]);
 
-        if(!pServer["port"] || pServer["port"].type == json_integer)
+        if(pServer["port"].type != json_integer)
             continue;
         Addr.port = (json_int_t)pServer["port"];
 
+        CServerInfo Info = {0};
+        if(pServer["info"].type != json_object || ParseInfo(pServer["info"], Info))
+        {
+            pfnCallback(Addr, nullptr, pUser);
+            Count++;
+            continue;
+        }
 
-        CServerInfo Info = {{0}};
-
+        pfnCallback(Addr, &Info, pUser);
+        Count++;
     }
+
+    return Count;
 }
 
 IHMasterServer *CreateHMasterServer() { return new CHMasterServer; }

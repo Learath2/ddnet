@@ -3,6 +3,8 @@
 #ifndef ENGINE_SERVERBROWSER_H
 #define ENGINE_SERVERBROWSER_H
 
+#include <base/hash.h>
+
 #include <engine/shared/protocol.h>
 
 #include "kernel.h"
@@ -56,6 +58,7 @@ public:
 	char m_aName[64];
 	char m_aMap[32];
 	int m_MapCrc;
+	SHA256_DIGEST m_MapSha;
 	int m_MapSize;
 	char m_aVersion[32];
 	char m_aAddress[NETADDR_MAXSTRSIZE];

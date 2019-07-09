@@ -32,6 +32,7 @@ class CRequest : public IJob
 
 	char m_aUrl[256];
 	bool m_CanTimeout;
+	bool m_Silent;
 
 	double m_Size;
 	double m_Current;
@@ -47,7 +48,7 @@ class CRequest : public IJob
 	int RunImpl(CURL *pHandle);
 
 public:
-	CRequest(const char *pUrl, bool CanTimeout);
+	CRequest(const char *pUrl, bool CanTimeout, bool Silent = false);
 
 	double Current() const { return m_Current; }
 	double Size() const { return m_Size; }
@@ -65,7 +66,7 @@ class CGet : public CRequest
 	unsigned char *m_pBuffer;
 
 public:
-	CGet(const char *pUrl, bool CanTimeout);
+	CGet(const char *pUrl, bool CanTimeout, bool Silent = false);
 	~CGet();
 
 	size_t ResultSize() const { if(!Result()) { return 0; } else { return m_BufferSize; } }
@@ -87,7 +88,7 @@ class CGetFile : public CRequest
 	IOHANDLE m_File;
 
 public:
-	CGetFile(IStorage *pStorage, const char *pUrl, const char *pDest, int StorageType = -2, bool CanTimeout = true);
+	CGetFile(IStorage *pStorage, const char *pUrl, const char *pDest, int StorageType = -2, bool CanTimeout = true, bool Silent = false);
 
 	const char *Dest() const { return m_aDest; }
 };
