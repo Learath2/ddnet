@@ -13,7 +13,7 @@
 
 class CHMasterServer : public IHMasterServer
 {
-    struct CMasterInfo
+    struct CMasterServer
     {
         char m_aUrl[128];
 
@@ -32,18 +32,23 @@ class CHMasterServer : public IHMasterServer
 
         std::shared_ptr<CGet> m_pStatusTask;
         std::shared_ptr<CGetFile> m_pListTask;
+        std::shared_ptr<CPostJson> m_pRegisterTask;
 
-        CMasterInfo() : m_aUrl(""), m_State(STATE_STALE), m_Tries(0), m_LastTry(0), m_pStatusTask(nullptr) {}
+        int m_Failed;
+        int64 m_LastRegister;
+        int m_Serial;
+
+        CMasterServer() : m_aUrl(""), m_State(STATE_STALE), m_Tries(0), m_LastTry(0), m_pStatusTask(nullptr) {}
 
         void GetEndpoint(char *pBuf, int BufSize, const char *pEndpoint)
         {
             str_format(pBuf, BufSize, "%s/" HTTP_MASTER_VERSION "/%s", m_aUrl, pEndpoint);
         }
     };
-    CMasterInfo m_aMasterServers[IHMasterServer::MAX_MASTERSERVERS];
+    CMasterServer m_aMasterServers[IHMasterServer::MAX_MASTERSERVERS];
     int m_Count;
 
-    CMasterInfo *m_pLastMaster;
+    CMasterServer *m_pLastMaster;
     FServerListCallback m_pfnAddServer;
     void *m_pCbUser;
 
@@ -60,6 +65,9 @@ public:
     void GetServerList(FServerListCallback pfnCallback, void *pUser);
     int ParseInfo(json_value pData, CServerInfo &Info);
     int ReadServerList(FServerListCallback pfnCallback, void *pUser);
+
+    bool CraftJson(char *pBuf, int BufSize, int Port, const char *pSecret, CServerInfo *pInfo);
+    void RegisterUpdate(int Port, const char *pSecret, CServerInfo *pInfo);
 
     int LoadDefaults();
 

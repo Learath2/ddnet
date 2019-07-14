@@ -14,7 +14,7 @@ class CMasterServer : public IEngineMasterServer
 {
 public:
 	// master server functions
-	struct CMasterInfo
+	struct CMasterServer
 	{
 		char m_aHostname[128];
 		NETADDR m_Addr;
@@ -30,7 +30,7 @@ public:
 		STATE_READY,
 	};
 
-	CMasterInfo m_aMasterServers[MAX_MASTERSERVERS];
+	CMasterServer m_aMasterServers[MAX_MASTERSERVERS];
 	std::shared_ptr<CHostLookup> m_apLookup[MAX_MASTERSERVERS];
 	int m_State;
 	IEngine *m_pEngine;
@@ -157,7 +157,7 @@ public:
 		LineReader.Init(File);
 		while(1)
 		{
-			CMasterInfo Info = {{0}};
+			CMasterServer Info = {{0}};
 			const char *pLine = LineReader.Get();
 			if(!pLine)
 				break;

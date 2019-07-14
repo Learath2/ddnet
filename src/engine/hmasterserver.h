@@ -23,6 +23,8 @@ public:
 	virtual void GetServerList(FServerListCallback pfnCallback, void *pUser) = 0;
 	virtual int ReadServerList(FServerListCallback pfnCallback, void *pUser) = 0;
 
+	virtual void RegisterUpdate(int Port, const char *pSecret, CServerInfo *pInfo) = 0;
+
 	virtual int Load() = 0;
 	virtual int Save() = 0;
 };

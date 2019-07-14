@@ -30,7 +30,7 @@ int CHMasterServer::LoadDefaults()
 {
     for(m_Count = 0; m_Count < MAX_MASTERSERVERS; m_Count++)
     {
-        CMasterInfo Info;
+        CMasterServer Info;
         str_format(Info.m_aUrl, sizeof(Info.m_aUrl), "https://master%d.ddnet.tw", m_Count);
         m_aMasterServers[m_Count] = Info;
     }
@@ -53,7 +53,7 @@ int CHMasterServer::Load()
     char *pLine = nullptr;
     for(m_Count = 0; m_Count < MAX_MASTERSERVERS && (pLine = Reader.Get()); m_Count++)
     {
-        CMasterInfo Info;
+        CMasterServer Info;
         str_copy(Info.m_aUrl, pLine, sizeof(Info.m_aUrl));
         m_aMasterServers[m_Count] = Info;
     }
@@ -73,7 +73,7 @@ int CHMasterServer::Save()
 
     for(int i = 0; i < m_Count; i++)
     {
-        if(m_aMasterServers[i].m_State == CMasterInfo::STATE_INVALID)
+        if(m_aMasterServers[i].m_State == CMasterServer::STATE_INVALID)
             continue;
 
         io_write(File, m_aMasterServers[i].m_aUrl, str_length(m_aMasterServers[i].m_aUrl));
@@ -89,8 +89,8 @@ void CHMasterServer::Refresh(bool Force)
 {
     for(int i = 0; i < m_Count; i++)
     {
-        if(m_aMasterServers[i].m_State != CMasterInfo::STATE_INVALID || Force)
-            m_aMasterServers[i].m_State = CMasterInfo::STATE_STALE;
+        if(m_aMasterServers[i].m_State != CMasterServer::STATE_INVALID || Force)
+            m_aMasterServers[i].m_State = CMasterServer::STATE_STALE;
     }
 }
 
@@ -98,10 +98,10 @@ void CHMasterServer::Update()
 {
     for(int i = 0; i < m_Count; i++)
     {
-        CMasterInfo *pMaster = &m_aMasterServers[i];
+        CMasterServer *pMaster = &m_aMasterServers[i];
         switch(pMaster->m_State)
         {
-        case CMasterInfo::STATE_STALE:
+        case CMasterServer::STATE_STALE:
             char aUrl[256];
             pMaster->GetEndpoint(aUrl, sizeof(aUrl), "status");
             pMaster->m_pStatusTask = std::make_shared<CGet>(aUrl, true, true);
@@ -110,34 +110,34 @@ void CHMasterServer::Update()
             pMaster->m_LastTry = time_get();
             pMaster->m_Tries++;
 
-            pMaster->m_State = CMasterInfo::STATE_REFRESHING;
+            pMaster->m_State = CMasterServer::STATE_REFRESHING;
             break;
 
-        case CMasterInfo::STATE_REFRESHING:
+        case CMasterServer::STATE_REFRESHING:
             dbg_assert((bool)pMaster->m_pStatusTask, "missing status task");
             if(pMaster->m_pStatusTask->State() == HTTP_DONE)
             {
                 const json_value Status = *pMaster->m_pStatusTask->ResultJson();
                 pMaster->m_State = Status.type == json_object && Status["status"].type == json_string && !str_comp(Status["status"], "ready") ?
-                                        CMasterInfo::STATE_LIVE : CMasterInfo::STATE_ERROR;
+                                        CMasterServer::STATE_LIVE : CMasterServer::STATE_ERROR;
                 pMaster->m_pStatusTask = nullptr;
             }
             else if(pMaster->m_pStatusTask->State() != HTTP_RUNNING && pMaster->m_pStatusTask->State() != HTTP_QUEUED){
                 dbg_msg("hmasterserver", "masterserver %d failed to respond or isn't ready", i);
                 pMaster->m_pStatusTask = nullptr;
-                pMaster->m_State = CMasterInfo::STATE_ERROR;
+                pMaster->m_State = CMasterServer::STATE_ERROR;
             }
             break;
 
-        case CMasterInfo::STATE_ERROR:
+        case CMasterServer::STATE_ERROR:
             if(pMaster->m_Tries > 2)
             {
                 dbg_msg("hmasterserver", "invalidating masterserver %d", i);
-                pMaster->m_State = CMasterInfo::STATE_INVALID;
+                pMaster->m_State = CMasterServer::STATE_INVALID;
             }
             else if(time_get() > pMaster->m_LastTry + time_freq() * 15)
             {
-                pMaster->m_State = CMasterInfo::STATE_STALE;
+                pMaster->m_State = CMasterServer::STATE_STALE;
             }
             break;
         }
@@ -161,11 +161,11 @@ void CHMasterServer::GetServerList(FServerListCallback pfnCallback, void *pUser)
     if(!m_pLastMaster || m_pLastMaster->m_pListTask)
         return;
 
-    if(m_pLastMaster->m_State != CMasterInfo::STATE_LIVE)
+    if(m_pLastMaster->m_State != CMasterServer::STATE_LIVE)
     {
         for(int i = 0; i < MAX_MASTERSERVERS; i++)
         {
-            if(m_aMasterServers[i].m_State == CMasterInfo::STATE_LIVE)
+            if(m_aMasterServers[i].m_State == CMasterServer::STATE_LIVE)
             {
                 m_pLastMaster = &m_aMasterServers[i];
                 break;
@@ -333,6 +333,37 @@ int CHMasterServer::ReadServerList(FServerListCallback pfnCallback, void *pUser)
     }
 
     return Count;
+}
+
+bool CHMasterServer::CraftJson(char *pBuf, int BufSize, int Port, const char *pSecret, CServerInfo *pInfo)
+{
+    /*char aSecretBuf[64];
+
+    #define E(buf, str) EscapeJson(buf, sizeof(buf), str)
+    str_format(pBuf, BufSize, R"({"port":%d,"secret":"%s","info":{"name":"%s","game_type":"%s","passworded":%s,"version":"%s","max_players":%d,"max_clients":%d,"map":{"name":"%s","size":%d,"crc32":"%s","sha256":"%s"},"clients":[%s]}})",
+        Port,
+        E(aSecretBuf, pSecret));
+    #undef E*/
+}
+
+void CHMasterServer::RegisterUpdate(int Port, const char *pSecret, CServerInfo *pInfo)
+{
+    int64 Now = time_get();
+    int64 Freq = time_freq();
+
+    char aBuf[512];
+    if(!CraftJson(aBuf, sizeof(aBuf), Port, pSecret, pInfo))
+        return;
+
+    for(int i = 0; i < m_Count; i++)
+    {
+        CMasterServer *pMaster = &m_aMasterServers[i];
+        if(pMaster->m_State != CMasterServer::STATE_LIVE || pMaster->m_LastRegister + 15 * Freq < Now
+            || pMaster->m_pRegisterTask)
+            continue;
+
+
+    }
 }
 
 IHMasterServer *CreateHMasterServer() { return new CHMasterServer; }
