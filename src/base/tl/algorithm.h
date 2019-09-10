@@ -99,12 +99,38 @@ void sort_bubble(R range)
 	}
 }
 
-/*
+template<class R>
+void sort_quick_impl(R range)
+{
+	if(range.empty() || range.size() == 1)
+		return;
+
+	typename R::type *pivot = &range.back();
+	unsigned i = 0;
+	for(unsigned j = 0; j < range.size(); j++)
+	{
+		typename R::type *io = &range.index(i), *jo = &range.index(j);
+		if(*jo < *pivot){
+			swap(*jo, *io);
+			i++;
+		}
+	}
+
+	swap(*pivot, range.index(i));
+	sort_quick_impl(range.slice(0, i));
+	sort_quick_impl(range.slice(i, range.size()));
+}
+
 template<class R>
 void sort_quick(R range)
 {
+	concept_empty::check(range);
+	concept_forwarditeration::check(range);
+	concept_backwarditeration::check(range);
 	concept_index::check(range);
-}*/
+
+	sort_quick_impl(range);
+}
 
 
 template<class R>
