@@ -611,6 +611,7 @@ set_glob(BASE GLOB_RECURSE src/base
   tl/sorted_array.h
   tl/string.h
   tl/threading.h
+  tl/unique_array.h
   unicode/confusables.c
   unicode/confusables_data.h
   unicode/tolower.c
@@ -1214,6 +1215,7 @@ if(GTEST_FOUND OR DOWNLOAD_GTEST)
     test.cpp
     test.h
     thread.cpp
+    tl.cpp
     unix.cpp
   )
   set(TESTS_EXTRA

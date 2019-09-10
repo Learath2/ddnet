@@ -111,6 +111,20 @@ struct concept_backwarditeration
 	template<typename T> static void check(T &t) { if(0) { t.back(); t.pop_back(); } }
 };
 
+/*
+	Concept: concept_unique
+		Checks for unique method
+
+		template<class T>
+		struct range
+		{
+			void unique();
+		};
+*/
+struct concept_unique
+{
+	template<typename T> static void check(T &t) { if(0) { t.unique(); } }
+};
 
 /*
 	Group: Range classes
@@ -186,6 +200,34 @@ public:
 	plain_range_sorted slice(unsigned start, unsigned count)
 	{
 		return plain_range_sorted(parent::begin+start, parent::begin+start+count);
+	}
+};
+
+/*
+	Class: unique_range_sorted
+
+	Concepts:
+		Same as <plain_range_sorted> but with these additions:
+		<concept_unique>
+*/
+template<class T>
+class unique_range_sorted : public plain_range_sorted<T>
+{
+	typedef plain_range_sorted<T> parent;
+public:
+	/* unique concept */
+	void unique() const { }
+
+	unique_range_sorted()
+	{}
+
+	unique_range_sorted(T *b, T *e)
+	: parent(b, e)
+	{}
+
+	unique_range_sorted slice(unsigned start, unsigned count)
+	{
+		return unique_range_sorted(parent::begin+start, parent::begin+start+count);
 	}
 };
 
