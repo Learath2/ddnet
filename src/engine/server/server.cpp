@@ -3246,9 +3246,10 @@ void CServer::SnapFreeID(int ID)
 }
 
 
+
 void *CServer::SnapNewItem(int Type, int ID, int Size)
 {
-	if(!(Type >= 0 && Type <= 0xffff))
+	if(Type > 0xffff)
 	{
 		g_UuidManager.GetUuid(Type);
 	}
