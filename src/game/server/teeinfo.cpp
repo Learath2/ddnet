@@ -13,24 +13,24 @@ struct StdSkin
 	int m_aSkinPartColors[6];
 };
 
-std::unordered_map<std::string, StdSkin> g_Skins = {
-{"default",{{"standard","","","standard","standard","standard"},{true,false,false,true,true,false},{1798004,0,0,1799582,1869630,0}}},
-{"bluekitty",{{"kitty","whisker","","standard","standard","standard"},{true,true,false,true,true,false},{8681144,-8229413,0,7885547,7885547,0}}},
-{"bluestripe",{{"standard","stripes","","standard","standard","standard"},{true,false,false,true,true,false},{10187898,0,0,750848,1944919,0}}},
-{"brownbear",{{"bear","bear","hair","standard","standard","standard"},{true,true,false,true,true,false},{1082745,-15634776,0,1082745,1147174,0}}},
-{"cammo",{{"standard","cammo2","","standard","standard","standard"},{true,true,false,true,true,false},{5334342,-11771603,0,750848,1944919,0}}},
-{"cammostripes",{{"standard","cammostripes","","standard","standard","standard"},{true,true,false,true,true,false},{5334342,-14840320,0,750848,1944919,0}}},
-{"coala",{{"koala","twinbelly","","standard","standard","standard"},{true,true,false,true,true,false},{184,-15397662,0,184,9765959,0}}},
-{"limekitty",{{"kitty","whisker","","standard","standard","standard"},{true,true,false,true,true,false},{4612803,-12229920,0,3827951,3827951,0}}},
-{"pinky",{{"standard","whisker","","standard","standard","standard"},{true,true,false,true,true,false},{15911355,-801066,0,15043034,15043034,0}}},
-{"redbopp",{{"standard","donny","unibop","standard","standard","standard"},{true,true,true,true,true,false},{16177260,-16590390,16177260,16177260,7624169,0}}},
-{"redstripe",{{"standard","stripe","","standard","standard","standard"},{true,false,false,true,true,false},{16307835,0,0,184,9765959,0}}},
-{"saddo",{{"standard","saddo","","standard","standard","standard"},{true,true,false,true,true,false},{7171455,-9685436,0,3640746,5792119,0}}},
-{"toptri",{{"standard","toptri","","standard","standard","standard"},{true,false,false,true,true,false},{6119331,0,0,3640746,5792119,0}}},
-{"twinbop",{{"standard","duodonny","twinbopp","standard","standard","standard"},{true,true,true,true,true,false},{15310519,-1600806,15310519,15310519,37600,0}}},
-{"twintri",{{"standard","twintri","","standard","standard","standard"},{true,true,false,true,true,false},{3447932,-14098717,0,185,9634888,0}}},
-{"warpaint",{{"standard","warpaint","","standard","standard","standard"},{true,false,false,true,true,false},{1944919,0,0,750337,1944919,0}}},
-};
+std::unordered_map<std::string, StdSkin> g_Skins({
+	{"default",(StdSkin){{"standard","","","standard","standard","standard"},{true,false,false,true,true,false},{1798004,0,0,1799582,1869630,0}}},
+	{"bluekitty",(StdSkin){{"kitty","whisker","","standard","standard","standard"},{true,true,false,true,true,false},{8681144,-8229413,0,7885547,7885547,0}}},
+	{"bluestripe",(StdSkin){{"standard","stripes","","standard","standard","standard"},{true,false,false,true,true,false},{10187898,0,0,750848,1944919,0}}},
+	{"brownbear",(StdSkin){{"bear","bear","hair","standard","standard","standard"},{true,true,false,true,true,false},{1082745,-15634776,0,1082745,1147174,0}}},
+	{"cammo",(StdSkin){{"standard","cammo2","","standard","standard","standard"},{true,true,false,true,true,false},{5334342,-11771603,0,750848,1944919,0}}},
+	{"cammostripes",(StdSkin){{"standard","cammostripes","","standard","standard","standard"},{true,true,false,true,true,false},{5334342,-14840320,0,750848,1944919,0}}},
+	{"coala",(StdSkin){{"koala","twinbelly","","standard","standard","standard"},{true,true,false,true,true,false},{184,-15397662,0,184,9765959,0}}},
+	{"limekitty",(StdSkin){{"kitty","whisker","","standard","standard","standard"},{true,true,false,true,true,false},{4612803,-12229920,0,3827951,3827951,0}}},
+	{"pinky",(StdSkin){{"standard","whisker","","standard","standard","standard"},{true,true,false,true,true,false},{15911355,-801066,0,15043034,15043034,0}}},
+	{"redbopp",(StdSkin){{"standard","donny","unibop","standard","standard","standard"},{true,true,true,true,true,false},{16177260,-16590390,16177260,16177260,7624169,0}}},
+	{"redstripe",(StdSkin){{"standard","stripe","","standard","standard","standard"},{true,false,false,true,true,false},{16307835,0,0,184,9765959,0}}},
+	{"saddo",(StdSkin){{"standard","saddo","","standard","standard","standard"},{true,true,false,true,true,false},{7171455,-9685436,0,3640746,5792119,0}}},
+	{"toptri",(StdSkin){{"standard","toptri","","standard","standard","standard"},{true,false,false,true,true,false},{6119331,0,0,3640746,5792119,0}}},
+	{"twinbop",(StdSkin){{"standard","duodonny","twinbopp","standard","standard","standard"},{true,true,true,true,true,false},{15310519,-1600806,15310519,15310519,37600,0}}},
+	{"twintri",(StdSkin){{"standard","twintri","","standard","standard","standard"},{true,true,false,true,true,false},{3447932,-14098717,0,185,9634888,0}}},
+	{"warpaint",(StdSkin){{"standard","warpaint","","standard","standard","standard"},{true,false,false,true,true,false},{1944919,0,0,750337,1944919,0}}},
+});
 
 CTeeInfo::CTeeInfo(const char *pSkinName, int UseCustomColor, int ColorBody, int ColorFeet)
 {
