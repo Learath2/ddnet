@@ -980,6 +980,9 @@ void CMenus::PopupMessage(const char *pTopic, const char *pBody, const char *pBu
 
 int CMenus::Render()
 {
+	if(Client()->State() == IClient::STATE_DEMOPLAYBACK && m_Popup == POPUP_NONE)
+		return 0;
+
 	CUIRect Screen = *UI()->Screen();
 	Graphics()->MapScreen(Screen.x, Screen.y, Screen.w, Screen.h);
 
@@ -1008,7 +1011,7 @@ int CMenus::Render()
 			ServerBrowser()->Refresh(IServerBrowser::TYPE_KOG);
 	}
 
-	if(Client()->State() == IClient::STATE_ONLINE)
+	if(Client()->State() >= IClient::STATE_ONLINE)
 	{
 		ms_ColorTabbarInactive = ms_ColorTabbarInactiveIngame;
 		ms_ColorTabbarActive = ms_ColorTabbarActiveIngame;
@@ -1095,6 +1098,7 @@ int CMenus::Render()
 		const char *pButtonText = "";
 		int ExtraAlign = 0;
 
+		ColorRGBA BgColor = ColorRGBA{0.0f, 0.0f, 0.0f, 0.5f};
 		if(m_Popup == POPUP_MESSAGE)
 		{
 			pTitle = m_aMessageTopic;
@@ -1213,6 +1217,14 @@ int CMenus::Render()
 			pButtonText = Localize("Ok");
 			ExtraAlign = -1;
 		}
+		else if(m_Popup == POPUP_WARNING)
+		{
+			BgColor = ColorRGBA{0.3f, 0.3f, 0.3f, 0.9f};
+			pTitle = Localize("Warning");
+			pExtraText = Localize("Broken assets");
+			ExtraAlign = -1;
+			pButtonText = Localize("Ok");
+		}
 
 		CUIRect Box, Part;
 		Box = Screen;
@@ -1223,7 +1235,7 @@ int CMenus::Render()
 		}
 
 		// render the box
-		RenderTools()->DrawUIRect(&Box, ColorRGBA(0,0,0,0.5f), CUI::CORNER_ALL, 15.0f);
+		RenderTools()->DrawUIRect(&Box, BgColor, CUI::CORNER_ALL, 15.0f);
 
 		Box.HSplitTop(20.f/UI()->Scale(), &Part, &Box);
 		Box.HSplitTop(24.f/UI()->Scale(), &Part, &Box);
@@ -1818,6 +1830,9 @@ int CMenus::Render()
 			{
 				if(m_Popup == POPUP_DISCONNECTED && Client()->m_ReconnectTime > 0)
 					Client()->m_ReconnectTime = 0;
+				if(m_Popup == POPUP_WARNING)
+					SetActive(false);
+
 				m_Popup = POPUP_NONE;
 			}
 		}
@@ -1954,8 +1969,15 @@ void CMenus::OnStateChange(int NewState, int OldState)
 		m_Popup = POPUP_CONNECTING;
 	else if(NewState == IClient::STATE_ONLINE || NewState == IClient::STATE_DEMOPLAYBACK)
 	{
-		m_Popup = POPUP_NONE;
-		SetActive(false);
+		if(true)
+		{
+			m_Popup = POPUP_WARNING;
+		}
+		else
+		{
+			m_Popup = POPUP_NONE;
+			SetActive(false);
+		}
 	}
 }
 
@@ -2025,8 +2047,7 @@ void CMenus::OnRender()
 	UI()->Update(mx,my,mx*3.0f,my*3.0f,Buttons);
 
 	// render
-	if(Client()->State() != IClient::STATE_DEMOPLAYBACK)
-		Render();
+	Render();
 
 	// render cursor
 	Graphics()->TextureSet(g_pData->m_aImages[IMAGE_CURSOR].m_Id);

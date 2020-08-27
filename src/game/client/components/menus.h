@@ -420,6 +420,7 @@ public:
 		POPUP_QUIT,
 		POPUP_DISCONNECT,
 		POPUP_DISCONNECT_DUMMY,
+		POPUP_WARNING,
 
 		// demo player states
 		DEMOPLAYER_NONE=0,
