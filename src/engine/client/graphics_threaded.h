@@ -4,6 +4,7 @@
 #include <engine/graphics.h>
 #include <engine/shared/config.h>
 
+#include <cstddef>
 #include <vector>
 
 #define CMD_BUFFER_DATA_BUFFER_SIZE 1024 * 1024 * 2
@@ -38,12 +39,14 @@ class CCommandBuffer
 			m_Used = 0;
 		}
 
-		void *Alloc(unsigned Requested)
+		void *Alloc(unsigned Requested, unsigned Alignment = alignof(std::max_align_t))
 		{
-			if(Requested + m_Used > m_Size)
+			size_t Offset = Alignment - (reinterpret_cast<uintptr_t>(m_pData + m_Used) % Alignment);
+			if(Requested + Offset + m_Used > m_Size)
 				return 0;
-			void *pPtr = &m_pData[m_Used];
-			m_Used += Requested;
+
+			void *pPtr = &m_pData[m_Used + Offset];
+			m_Used += Requested + Offset;
 			return pPtr;
 		}
 
@@ -54,6 +57,7 @@ class CCommandBuffer
 
 public:
 	CBuffer m_CmdBuffer;
+	unsigned m_InitialPadding;
 	CBuffer m_DataBuffer;
 
 	enum
@@ -176,7 +180,9 @@ public:
 			m_Cmd(Cmd), m_Size(0) {}
 		unsigned m_Cmd;
 		unsigned m_Size;
+		unsigned m_Padding;
 	};
+	SCommand *m_pLastCmd;
 
 	struct SState
 	{
@@ -559,7 +565,7 @@ public:
 
 	//
 	CCommandBuffer(unsigned CmdBufferSize, unsigned DataBufferSize) :
-		m_CmdBuffer(CmdBufferSize), m_DataBuffer(DataBufferSize)
+		m_CmdBuffer(CmdBufferSize), m_InitialPadding(0), m_DataBuffer(DataBufferSize), m_pLastCmd(nullptr)
 	{
 	}
 
@@ -575,11 +581,20 @@ public:
 		(void)static_cast<const SCommand *>(&Command);
 
 		// allocate and copy the command into the buffer
-		SCommand *pCmd = (SCommand *)m_CmdBuffer.Alloc(sizeof(Command));
+		T *pCmd = (T *)m_CmdBuffer.Alloc(sizeof(*pCmd), alignof(T));
 		if(!pCmd)
 			return false;
-		mem_copy(pCmd, &Command, sizeof(Command));
+		*pCmd = Command;
+
 		pCmd->m_Size = sizeof(Command);
+		pCmd->m_Padding = 0;
+
+		if(m_pLastCmd)
+			m_pLastCmd->m_Padding = reinterpret_cast<uintptr_t>(pCmd) - (reinterpret_cast<uintptr_t>(m_pLastCmd) + m_pLastCmd->m_Size);
+		else
+			m_InitialPadding = reinterpret_cast<uintptr_t>(pCmd) - reinterpret_cast<uintptr_t>(m_CmdBuffer.DataPtr());
+		m_pLastCmd = pCmd;
+
 		return true;
 	}
 
@@ -588,13 +603,15 @@ public:
 		if(*pIndex >= m_CmdBuffer.DataUsed())
 			return NULL;
 
-		SCommand *pCommand = (SCommand *)&m_CmdBuffer.DataPtr()[*pIndex];
-		*pIndex += pCommand->m_Size;
+		SCommand *pCommand = (SCommand *)&m_CmdBuffer.DataPtr()[*pIndex == 0 ? m_InitialPadding : *pIndex];
+		*pIndex += pCommand->m_Size + pCommand->m_Padding + (*pIndex == 0 ? m_InitialPadding : 0);
 		return pCommand;
 	}
 
 	void Reset()
 	{
+		m_pLastCmd = NULL;
+		m_InitialPadding = 0;
 		m_CmdBuffer.Reset();
 		m_DataBuffer.Reset();
 	}
