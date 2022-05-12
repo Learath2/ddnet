@@ -69,6 +69,8 @@ bool CHttpRequest::ConfigureHandle(CURL *pHandle, CURLSH *pShare)
 {
 	if(!BeforeInit())
 		return false;
+	
+	m_pHandle = pHandle;
 
 	if(g_Config.m_DbgCurl)
 	{
@@ -353,16 +355,20 @@ void CHttp::Run()
 			{
 				if(m->msg == CURLMSG_DONE)
 				{
-					auto RequestIt = m_RunningRequests.find(m->easy_handle);
-					dbg_assert(RequestIt != m_RunningRequests.end(), "Running handle not added to map");
-					auto Request = RequestIt->second;
-					
-					Request->OnCompletionInternal(m->data.result);
+					SRequestWrapper *pWrapper = nullptr;
+					curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &pWrapper);
+
+					pWrapper->m_pRequest->OnCompletionInternal(m->data.result);
 
 					curl_multi_remove_handle(m_pHandle, m->easy_handle);
 					curl_easy_cleanup(m->easy_handle);
 
-					m_RunningRequests.erase(RequestIt);
+					if(m_pFirstRunning.get() == pWrapper)
+						m_pFirstRunning = pWrapper->m_pNext;
+					if(pWrapper->m_pPrev)
+						pWrapper->m_pPrev->m_pNext = pWrapper->m_pNext;
+					if(pWrapper->m_pNext)
+						pWrapper->m_pNext->m_pPrev = pWrapper->m_pPrev;
 				}
 			}
 		}
@@ -393,16 +399,26 @@ void CHttp::Run()
 
 			pRequest->m_State = HTTP_RUNNING;
 			pRequest->OnStart();
-			m_RunningRequests.emplace(std::make_pair(pHandle, std::move(pRequest)));
+
+			auto pWrapper = std::make_shared<SRequestWrapper>(std::move(pRequest));
+			pWrapper->m_pNext = m_pFirstRunning;
+			pWrapper->m_pPrev = nullptr;
+			if(m_pFirstRunning)
+				m_pFirstRunning->m_pPrev = pWrapper;
+				
+			m_pFirstRunning = std::move(pWrapper);
+
+			curl_easy_setopt(pHandle, CURLOPT_PRIVATE, m_pFirstRunning.get());
 			curl_multi_add_handle(m_pHandle, pHandle);
 		}
 	}
 
-	for(auto &ReqPair : m_RunningRequests)
+	for(auto pWrapper = m_pFirstRunning; pWrapper; )
 	{
-		CURL *pHandle = ReqPair.first;
-		curl_multi_remove_handle(m_pHandle, pHandle);
-		curl_easy_cleanup(pHandle);
+		auto pNext = pWrapper->m_pNext;
+		pWrapper->m_pPrev = nullptr;
+		pWrapper->m_pNext = nullptr;
+		pWrapper = pNext;
 	}
 
 	curl_share_cleanup(m_pShare);

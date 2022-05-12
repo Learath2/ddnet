@@ -47,6 +47,7 @@ class CHttpRequest
 {
 	friend class CHttp;
 
+	CURL *m_pHandle;
 	enum class REQUEST
 	{
 		GET=0,
@@ -85,7 +86,7 @@ class CHttpRequest
 
 	std::mutex m_StateLock;
 	std::condition_variable m_DoneCV;
-	std::atomic<int> m_State{HTTP_QUEUED} GUARDED_BY(m_StateLock);
+	std::atomic<int> m_State{HTTP_QUEUED};
 
 	std::atomic<bool> m_Abort{false};
 
@@ -108,7 +109,7 @@ protected:
 
 public:
 	CHttpRequest(const char *pUrl);
-	~CHttpRequest();
+	virtual ~CHttpRequest();
 
 	void Timeout(CTimeout Timeout) { m_Timeout = Timeout; }
 	void LogProgress(HTTPLOG LogProgress) { m_LogProgress = LogProgress; }
@@ -198,12 +199,21 @@ class CHttp
 	std::atomic<bool> m_Shutdown = false;
 
 	std::mutex m_Lock;
-	std::queue<std::shared_ptr<CHttpRequest>> m_PendingRequests GUARDED_BY(m_Lock);
+	std::queue<std::shared_ptr<CHttpRequest>> m_PendingRequests;
 
 	CURLSH *m_pShare = nullptr;
 	CURLM *m_pHandle = nullptr;
-	std::unordered_map<CURL *, std::shared_ptr<CHttpRequest>> m_RunningRequests;
-	
+
+	struct SRequestWrapper
+	{
+		std::shared_ptr<CHttpRequest> m_pRequest;
+		std::shared_ptr<SRequestWrapper> m_pNext;
+		std::shared_ptr<SRequestWrapper> m_pPrev;
+
+		SRequestWrapper(std::shared_ptr<CHttpRequest> pRequest) : m_pRequest(pRequest) {}
+	};
+	std::shared_ptr<SRequestWrapper> m_pFirstRunning;
+
 public:	
 	void Init();
 	void AddRequest(std::shared_ptr<CHttpRequest> pRequest);
