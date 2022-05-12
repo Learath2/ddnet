@@ -1667,10 +1667,10 @@ set_src(ENGINE_SHARED GLOB_RECURSE src/engine/shared
   filecollection.cpp
   filecollection.h
   global_uuid_manager.cpp
-  huffman.cpp
-  huffman.h
   http.cpp
   http.h
+  huffman.cpp
+  huffman.h
   image_manipulation.cpp
   image_manipulation.h
   jobs.cpp

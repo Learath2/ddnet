@@ -7,6 +7,7 @@
 #include "graphics.h"
 #include "message.h"
 #include <base/hash.h>
+#include <engine/shared/http.h>
 #include <engine/friends.h>
 
 struct SWarning;
@@ -237,6 +238,7 @@ public:
 	virtual SWarning *GetCurWarning() = 0;
 	virtual CChecksumData *ChecksumData() = 0;
 	virtual bool InfoTaskRunning() = 0;
+	virtual CHttp *Http() = 0;
 };
 
 class IGameClient : public IInterface

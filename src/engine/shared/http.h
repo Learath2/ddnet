@@ -2,7 +2,13 @@
 #define ENGINE_SHARED_HTTP_H
 
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <unordered_map>
 #include <engine/shared/jobs.h>
+
+#include <curl/curl.h>
 
 typedef struct _json_value json_value;
 class IStorage;
@@ -37,8 +43,10 @@ struct CTimeout
 	long LowSpeedTime;
 };
 
-class CHttpRequest : public IJob
+class CHttpRequest
 {
+	friend class CHttp;
+
 	enum class REQUEST
 	{
 		GET=0,
@@ -47,6 +55,8 @@ class CHttpRequest : public IJob
 		POST_JSON,
 	};
 	char m_aUrl[256] = {0};
+
+	char m_aErr[CURL_ERROR_SIZE] = {0};
 
 	void *m_pHeaders = nullptr;
 	unsigned char *m_pBody = nullptr;
@@ -73,13 +83,15 @@ class CHttpRequest : public IJob
 	HTTPLOG m_LogProgress = HTTPLOG::ALL;
 	IPRESOLVE m_IpResolve = IPRESOLVE::WHATEVER;
 
-	std::atomic<int> m_State{HTTP_QUEUED};
+	std::mutex m_StateLock;
+	std::condition_variable m_DoneCV;
+	std::atomic<int> m_State{HTTP_QUEUED} GUARDED_BY(m_StateLock);
+
 	std::atomic<bool> m_Abort{false};
 
-	void Run();
+	bool ConfigureHandle(CURL *pHandle, CURLSH *pShare);
 	// Abort the request with an error if `BeforeInit()` returns false.
 	bool BeforeInit();
-	int RunImpl(void *pUser);
 
 	// Abort the request if `OnData()` returns something other than
 	// `DataSize`.
@@ -88,9 +100,11 @@ class CHttpRequest : public IJob
 	static int ProgressCallback(void *pUser, double DlTotal, double DlCurr, double UlTotal, double UlCurr);
 	static size_t WriteCallback(char *pData, size_t Size, size_t Number, void *pUser);
 
+	void OnStart();
+	void OnCompletionInternal(CURLcode Result);
 protected:
 	virtual void OnProgress() {}
-	virtual int OnCompletion(int State);
+	virtual void OnCompletion() {}
 
 public:
 	CHttpRequest(const char *pUrl);
@@ -136,6 +150,9 @@ public:
 	int Progress() const { return m_Progress.load(std::memory_order_relaxed); }
 	int State() const { return m_State; }
 	void Abort() { m_Abort = true; }
+	
+	bool IsDone() const;
+	void Wait();
 
 	void Result(unsigned char **ppResult, size_t *pResultLength) const;
 	json_value *ResultJson() const;
@@ -175,6 +192,27 @@ inline std::unique_ptr<CHttpRequest> HttpPostJson(const char *pUrl, const char *
 	return pResult;
 }
 
-bool HttpInit(IStorage *pStorage);
-void EscapeUrl(char *pBuf, int Size, const char *pStr);
+class CHttp
+{
+	void *m_pThread = nullptr;
+	std::atomic<bool> m_Shutdown = false;
+
+	std::mutex m_Lock;
+	std::queue<std::shared_ptr<CHttpRequest>> m_PendingRequests GUARDED_BY(m_Lock);
+
+	CURLSH *m_pShare = nullptr;
+	CURLM *m_pHandle = nullptr;
+	std::unordered_map<CURL *, std::shared_ptr<CHttpRequest>> m_RunningRequests;
+	
+public:	
+	void Init();
+	void AddRequest(std::shared_ptr<CHttpRequest> pRequest);
+
+	static void EscapeUrl(char *pBuf, int Size, const char *pStr);
+
+private:
+	static void ThreadMain(void *pUser);
+	void Run();
+};
+
 #endif // ENGINE_SHARED_HTTP_H
